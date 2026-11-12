@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,6 +16,8 @@ import android.os.Looper;
 import android.view.View;
 import android.view.Window;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -49,7 +52,9 @@ public class MainActivity extends Activity {
     private static final Set<String> FETCH_HOSTS = new HashSet<>(Arrays.asList(
             "api.warframestat.us", "content.warframe.com", "raw.githubusercontent.com"));
 
+    private static final int PICK_FILE = 42;
     private WebView web;
+    private ValueCallback<Uri[]> fileCallback;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -66,6 +71,7 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setTextZoom(100);
+        s.setMediaPlaybackRequiresUserGesture(false); // the secret sound plays without a tap
 
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -87,6 +93,21 @@ public class MainActivity extends Activity {
                 return true; // outside links (wiki pages) open in the phone's browser
             }
         });
+        // Lets <input type="file"> open the phone's file picker (used for the secret sound)
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> cb, FileChooserParams params) {
+                if (fileCallback != null) fileCallback.onReceiveValue(null);
+                fileCallback = cb;
+                try {
+                    startActivityForResult(params.createIntent(), PICK_FILE);
+                } catch (Exception e) {
+                    fileCallback = null;
+                    return false;
+                }
+                return true;
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "WRC");
         web.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> updateGestureExclusion());
 
@@ -103,6 +124,16 @@ public class MainActivity extends Activity {
         int w = (int) (20 * d);
         int top = Math.max(0, h / 2 - band / 2);
         web.setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, top, w, top + band)));
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        if (request == PICK_FILE && fileCallback != null) {
+            fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
+            fileCallback = null;
+            return;
+        }
+        super.onActivityResult(request, result, data);
     }
 
     @Override
@@ -169,6 +200,13 @@ public class MainActivity extends Activity {
                 final String js = "window.__wrcHttp(" + JSONObject.quote(id) + "," + ok + "," + JSONObject.quote(body) + ")";
                 ui.post(() -> web.evaluateJavascript(js, null));
             });
+        }
+
+        /** True when the phone is on silent or vibrate, so the secret sound stays quiet. */
+        @JavascriptInterface
+        public boolean isSilent() {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            return am != null && am.getRingerMode() != AudioManager.RINGER_MODE_NORMAL;
         }
 
         @JavascriptInterface

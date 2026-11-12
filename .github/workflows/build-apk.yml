@@ -72,6 +72,10 @@ jobs:
           tar xzf fontsource-crimson-pro-*.tgz -C cp
           cp fe/package/files/im-fell-english-sc-latin-400-normal.woff2 "$W/fonts/"
           for w in 400 600; do cp "cp/package/files/crimson-pro-latin-$w-normal.woff2" "$W/fonts/"; done
+          # Technocyte Coda theme's pixel lettering
+          npm pack @fontsource/vt323@5 --silent
+          mkdir vt && tar xzf fontsource-vt323-*.tgz -C vt
+          cp vt/package/files/vt323-latin-400-normal.woff2 "$W/fonts/"
           ls -la "$W" "$W/fonts"
 
       - name: Decode the signing key
