@@ -49,7 +49,7 @@ const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
 const DEFAULT_SETTINGS = {
   theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {},
   show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true },
-  reduceMotion: false, compact: false, textSize: 100, startPage: 3,
+  reduceMotion: false, compact: false, textSize: 100, startPage: 3, fissMode: "normal",
 };
 const native = window.WRC || null; // Android bridge, absent in a normal browser
 
@@ -557,7 +557,8 @@ function renderTrade() {
 /* ---------- PAGE: RELIC RUNS ---------- */
 let runsTier = "all";
 function buildRuns() {
-  $("#runs").innerHTML = `<header><h1>Relic Runs</h1><p>Check this during a relic mission. Tick a part anywhere and it drops off this page.</p></header>
+  $("#runs").innerHTML = `<header><h1>Relic Runs</h1><p>Check this during a relic mission. Tick a part anywhere and it drops off this page. Pull down to refresh.</p></header>
+    <div class="controls fisstoggle" id="fissMode"><button class="chip" data-fmode="normal">Normal</button><button class="chip" data-fmode="sp">Steel Path</button><span class="ctlk" style="margin-left:4px">fissures</span></div>
     <div id="runsBody"></div>
     <footer>Drop chance per refinement: Common 25.33% Intact → 16.67% Radiant · Uncommon 11% → 20% · Rare 2% → 10%. Vaulted relics can be traded with other players, or bought from Varzia when they're in Prime Resurgence.</footer>`;
 }
@@ -590,12 +591,14 @@ function renderRuns() {
   const nrm = needMap(needItems);
   const needTiers = {};
   Object.keys(nrm).forEach(r => { if (obtainable(r)) needTiers[tierOf(r)] = (needTiers[tierOf(r)] || 0) + 1; });
-  h += `<h2 class="sec">Void Fissures</h2><p class="secsub">Running now. Gold rows match a tier you have farmable relics to crack${starItems.length ? " for your starred items" : ""}.</p>`;
+  const sp = S().fissMode === "sp";
+  document.querySelectorAll("#fissMode [data-fmode]").forEach(b => b.setAttribute("aria-pressed", (b.dataset.fmode === "sp") === sp));
+  h += `<h2 class="sec">Void Fissures${sp ? " · Steel Path" : ""}</h2><p class="secsub">Running now. Gold rows match a tier you have farmable relics to crack${starItems.length ? " for your starred items" : ""}.</p>`;
   const now = Date.now();
-  const fiss = (LIVE && LIVE.fissures || []).filter(f => f.expiry > now)
+  const fiss = (LIVE && LIVE.fissures || []).filter(f => f.expiry > now && !!f.hard === sp)
     .sort((a, b) => (a.storm - b.storm) || (a.hard - b.hard) || (TIER_ORDER[a.tier] ?? 9) - (TIER_ORDER[b.tier] ?? 9) || a.expiry - b.expiry);
   if (!LIVE) h += `<p class="empty">Live fissures will show once the app can reach the worldstate.</p>`;
-  else if (!fiss.length) h += `<p class="empty">No fissures in the feed right now.</p>`;
+  else if (!fiss.length) h += `<p class="empty">No ${sp ? "Steel Path " : ""}fissures in the feed right now.</p>`;
   else h += `<div class="fiss">${fiss.map(f => {
     const match = f.tier === "Omnia" ? Object.keys(needTiers).length > 0 : !!needTiers[f.tier];
     const cnt = f.tier === "Omnia" ? Object.values(needTiers).reduce((a, b) => a + b, 0) : needTiers[f.tier] || 0;
@@ -629,44 +632,51 @@ function renderRuns() {
 }
 
 /* ---------- PAGE: ROTATING ---------- */
-function vendorCard(title, tag, statusHTML, body) {
-  return `<article class="card vend"><div class="chead"><div class="name">${title}</div><div class="meta"><span class="tag">${tag}</span><span>${statusHTML}</span></div></div>${body}</article>`;
+const rotOpen = new Set(); // which Rotating dropdowns are open (they start closed)
+function rotSection(key, title, note, body) {
+  return `<details class="rot card" data-rot="${key}"${rotOpen.has(key) ? " open" : ""}><summary><span class="rname">${title}</span>${note ? `<em class="rnote">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
+}
+function nextWeeklyReset(now = new Date()) {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() + ((8 - d.getUTCDay()) % 7 || 7));
+  return d.getTime();
 }
 function renderRotating() {
   const now = Date.now(), L = LIVE;
-  let h = `<header><h1>Rotating</h1><p>Vendors with stock that changes. Times count down live.</p></header>`;
+  let h = `<header><h1>Rotating</h1><p>Vendors and rewards that change. Tap one to open it. Pull down to refresh.</p></header>`;
   if (!L) { $("#rotating").innerHTML = h + `<p class="empty">Live vendor info shows here once the app can reach the worldstate.</p>`; return; }
   const needRel = new Set(Object.keys(needMap(starred().filter(active))));
   const row = (n, pr) => `<div class="rrow"><span class="pn">${esc(n)}${needRel.has((RELIC_RE.exec(n) || []).slice(1).join(" ")) ? ` <span class="flag need">starred</span>` : ""}</span>${pr ? `<span class="pr">${pr}</span>` : ""}</div>`;
-  let cards = "";
+  const msg = t => `<div class="rlist"><span class="secsub" style="margin:0">${t}</span></div>`;
+  let out = "";
   const b = L.baro;
   if (b) {
     const here = b.active && b.expiry > now;
-    const status = here ? `Leaves in ${until(b.expiry)}` : b.activation > now ? `Arrives in ${until(b.activation)}` : "Timing unknown";
+    const note = here ? `leaves in ${until(b.expiry)}` : b.activation > now ? `arrives in ${until(b.activation)}` : "";
     const inv = here && b.inventory && b.inventory.length
       ? `<div class="rlist">${b.inventory.map(x => row(x.n, [x.ducats ? `${x.ducats} ducats` : "", x.credits ? `${Number(x.credits).toLocaleString()} cr` : ""].filter(Boolean).join(" · "))).join("")}</div>`
-      : `<div class="rlist"><span class="secsub" style="margin:0">${here ? "No inventory in the feed yet." : "His inventory shows up when he arrives."}</span></div>`;
-    cards += vendorCard("Baro Ki'Teer", "Void Trader", status, `<div class="vline">${here ? "At" : "Next at"} <b>${esc(b.location || "a relay")}</b></div>${inv}`);
+      : msg(here ? "No inventory in the feed yet." : "His inventory shows up when he arrives.");
+    out += rotSection("baro", "Void Trader", note, `<div class="vline">Baro Ki'Teer · ${here ? "at" : "next at"} <b>${esc(b.location || "a relay")}</b></div>${inv}`);
   }
-  (L.darvo || []).filter(d => !d.expiry || d.expiry > now).forEach(d => {
+  const deals = (L.darvo || []).filter(d => !d.expiry || d.expiry > now);
+  out += rotSection("darvo", "Darvo", deals[0] && deals[0].expiry ? `ends in ${until(deals[0].expiry)}` : "", deals.length ? deals.map(d => {
     const off = d.orig ? Math.round(100 - 100 * d.sale / d.orig) : 0;
-    cards += vendorCard("Darvo", "Daily deal", d.expiry ? `Ends in ${until(d.expiry)}` : "",
-      `<div class="vline"><div class="big">${esc(d.n)}</div></div><div class="rlist"><div class="rrow"><span class="pn">${d.sale} platinum${d.orig ? ` <span class="sub" style="margin:0">(was ${d.orig}, ${off}% off)</span>` : ""}</span></div>${d.total ? `<div class="rrow"><span class="pn">${Math.max(0, d.total - (d.sold || 0))} of ${d.total} left</span></div>` : ""}</div>`);
-  });
-  if (L.teshin) {
-    const t = L.teshin;
-    cards += vendorCard("Teshin", "Steel Path honors", t.expiry ? `Changes in ${until(t.expiry)}` : "",
-      `<div class="vline"><div class="big">${esc(t.n || "Unknown")}</div></div><div class="rlist">${t.cost ? `<div class="rrow"><span class="pn">${t.cost} Steel Essence</span></div>` : ""}<span class="secsub" style="margin:0">The weekly rotating item in his Steel Path Honors shop.</span></div>`);
-  }
+    return `<div class="vline"><div class="big">${esc(d.n)}</div></div><div class="rlist"><div class="rrow"><span class="pn">${d.sale} platinum${d.orig ? ` <span class="sub" style="margin:0">(was ${d.orig}, ${off}% off)</span>` : ""}</span></div>${d.total ? `<div class="rrow"><span class="pn">${Math.max(0, d.total - (d.sold || 0))} of ${d.total} left</span></div>` : ""}</div>`;
+  }).join("") : msg("No daily deal in the feed right now."));
+  const t = L.teshin;
+  out += rotSection("teshin", "Teshin (Steel Path Honors)", t && t.expiry ? `changes in ${until(t.expiry)}` : "", t
+    ? `<div class="vline"><div class="big">${esc(t.n || "Unknown")}</div></div><div class="rlist">${t.cost ? `<div class="rrow"><span class="pn">${t.cost} Steel Essence</span></div>` : ""}<span class="secsub" style="margin:0">The weekly rotating item in his Steel Path Honors shop.</span></div>`
+    : msg("His weekly item isn't in the feed right now."));
+  const c = L.circuit;
+  out += rotSection("circuit", "Steel Path Circuit", `resets in ${until(nextWeeklyReset())}`, c && c.length
+    ? `<div class="rlist">${c.map(n => { const pr = BYNAME[n + " Prime"]; return `<div class="rrow"><span class="pn">${esc(n)} Incarnon Genesis${pr && state.stars[pr.id] ? ` <span class="flag need">starred Prime</span>` : ""}</span></div>`; }).join("")}<span class="secsub" style="margin:4px 0 0">This week's Incarnon Genesis choices from the Steel Path Circuit in Duviri.</span></div>`
+    : msg("This week's choices aren't in the feed right now."));
   const v = L.varzia;
-  if (v && v.inventory && v.inventory.length) {
+  out += rotSection("varzia", "Varzia", v && v.expiry ? `rotates in ${until(v.expiry)}` : "", v && v.inventory && v.inventory.length ? (() => {
     const rel = v.inventory.filter(x => RELIC_RE.test(x.n)), other = v.inventory.filter(x => !RELIC_RE.test(x.n));
-    cards += vendorCard("Varzia", "Prime Resurgence", v.expiry ? `Rotates in ${until(v.expiry)}` : "",
-      `<div class="rlist">${other.map(x => row(x.n)).join("")}${rel.length ? `<div class="group" style="padding:6px 0 0">Relics</div>` + rel.map(x => row(x.n)).join("") : ""}</div>`);
-  } else {
-    cards += vendorCard("Varzia", "Prime Resurgence", "", `<div class="rlist"><span class="secsub" style="margin:0">Her stock isn't in the live feed right now.</span></div>`);
-  }
-  $("#rotating").innerHTML = h + `<div class="grid">${cards}</div><footer>Live info from the worldstate (PC and crossplay, which includes Xbox). Gold "starred" tags mark relics with parts for your starred items.</footer>`;
+    return `<div class="vline">Prime Resurgence</div><div class="rlist">${other.map(x => row(x.n)).join("")}${rel.length ? `<div class="group" style="padding:6px 0 0">Relics</div>` + rel.map(x => row(x.n)).join("") : ""}</div>`;
+  })() : msg("Her stock isn't in the live feed right now."));
+  $("#rotating").innerHTML = h + `<div class="rots">${out}</div><footer>Live info from the worldstate (PC and crossplay, which includes Xbox). Gold "starred" tags mark relics with parts for your starred items.</footer>`;
 }
 
 /* ---------- UPDATED LINE ---------- */
@@ -934,6 +944,14 @@ function bindEvents() {
     if (cp) { const ok = await copyText(cp.dataset.copy); cp.textContent = ok ? "Copied" : "Blocked"; setTimeout(() => { cp.textContent = "Copy"; }, 1800); }
   });
 
+  $("#runs").addEventListener("click", e => {
+    const b = e.target.closest("[data-fmode]"); if (!b) return;
+    S().fissMode = b.dataset.fmode; save(); renderRuns();
+  });
+  $("#rotating").addEventListener("toggle", e => {
+    const d = e.target; if (!d.matches || !d.matches("details.rot")) return;
+    if (d.open) rotOpen.add(d.dataset.rot); else rotOpen.delete(d.dataset.rot);
+  }, true);
   $("#tabs").addEventListener("click", e => { const a = e.target.closest("[data-page]"); if (a) goPage(+a.dataset.page, true); });
   $("#menuBtn").addEventListener("click", () => setDrawer(true));
   $("#scrim").addEventListener("click", () => { setDrawer(false); setWeekly(false); });
@@ -998,6 +1016,38 @@ function bindPages() {
     raf = requestAnimationFrame(() => { raf = 0; const i = Math.round(p.scrollLeft / p.clientWidth); if (i !== page) setTab(i); });
   }, { passive: true });
   window.addEventListener("resize", () => { p.scrollLeft = page * p.clientWidth; });
+}
+
+/* ---------- PULL TO REFRESH (Rotating and Relic Runs) ---------- */
+function bindPullRefresh() {
+  ["#pg-rotating", "#pg-runs"].forEach(sel => {
+    const pg = $(sel);
+    const tip = document.createElement("div");
+    tip.className = "ptr"; tip.setAttribute("aria-hidden", "true");
+    pg.prepend(tip);
+    let y0 = null, x0 = 0, pull = 0, busy = false;
+    pg.addEventListener("touchstart", e => {
+      if (busy || pg.scrollTop > 0 || drawerOpen || weeklyOpen) { y0 = null; return; }
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; pull = 0;
+    }, { passive: true });
+    pg.addEventListener("touchmove", e => {
+      if (y0 == null) return;
+      const dy = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
+      if (pull === 0 && Math.abs(dx) > Math.abs(dy)) { y0 = null; return; } // a sideways swipe between pages
+      pull = Math.max(0, Math.min(90, dy / 2));
+      tip.style.transform = `translateY(${pull}px)`;
+      tip.style.opacity = String(Math.min(1, pull / 60));
+      tip.textContent = pull >= 60 ? "Release to refresh" : "Pull to refresh";
+    }, { passive: true });
+    pg.addEventListener("touchend", async () => {
+      if (y0 == null) return;
+      y0 = null;
+      if (pull < 60) { tip.style.transform = ""; tip.style.opacity = "0"; return; }
+      busy = true; tip.textContent = "Refreshing…"; tip.style.transform = "translateY(60px)";
+      try { await loadLive(); } catch (e) {}
+      tip.textContent = "Updated"; setTimeout(() => { tip.style.transform = ""; tip.style.opacity = "0"; busy = false; }, 600);
+    });
+  });
 }
 
 /* ---------- SIDE PANELS: settings (left) and checklist (right) ---------- */
@@ -1196,16 +1246,18 @@ async function loadData() {
 const ms = v => { if (v == null) return 0; if (typeof v === "number") return v; if (v.$date) return +(v.$date.$numberLong || v.$date); const t = Date.parse(v); return isNaN(t) ? 0 : t; };
 async function liveFromStat() {
   const q = "?language=en";
-  const rs = await Promise.allSettled(["voidTrader", "dailyDeals", "steelPath", "fissures", "vaultTrader"].map(k => getJSONAny(`${WS}/${k}${q}`)));
+  const rs = await Promise.allSettled(["voidTrader", "dailyDeals", "steelPath", "fissures", "vaultTrader", "duviriCycle"].map(k => getJSONAny(`${WS}/${k}${q}`)));
   if (rs.every(r => r.status === "rejected")) throw new Error("warframestat unreachable");
   const v = i => rs[i].status === "fulfilled" ? rs[i].value : null;
-  const vt = v(0), dd = v(1), sp = v(2), fi = v(3), vz = v(4);
+  const vt = v(0), dd = v(1), sp = v(2), fi = v(3), vz = v(4), dc = v(5);
+  const hard = dc && Array.isArray(dc.choices) ? dc.choices.find(x => /hard|steel/i.test(x.category || "")) : null;
   return {
     baro: vt ? { active: !!vt.active, activation: ms(vt.activation), expiry: ms(vt.expiry), location: vt.location, inventory: (vt.inventory || []).map(x => ({ n: x.item, ducats: x.ducats, credits: x.credits })) } : null,
     darvo: (Array.isArray(dd) ? dd : []).map(d => ({ n: d.item, orig: d.originalPrice, sale: d.salePrice, total: d.total, sold: d.sold, expiry: ms(d.expiry) })),
     teshin: sp && sp.currentReward ? { n: sp.currentReward.name, cost: sp.currentReward.cost, expiry: ms(sp.expiry) } : null,
     fissures: (Array.isArray(fi) ? fi : []).filter(f => !f.expired).map(f => ({ node: f.node, type: f.missionType || f.missionKey || "", tier: f.tier, expiry: ms(f.expiry), storm: !!f.isStorm, hard: !!f.isHard })),
     varzia: vz && (vz.inventory || []).length ? { expiry: ms(vz.expiry), inventory: vz.inventory.map(x => ({ n: x.item })) } : null,
+    circuit: hard && Array.isArray(hard.choices) ? hard.choices.map(String) : null,
   };
 }
 const HUBS = { MercuryHUB: "Larunda Relay (Mercury)", VenusHUB: "Vesper Relay (Venus)", EarthHUB: "Strata Relay (Earth)", SaturnHUB: "Kronia Relay (Saturn)", EuropaHUB: "Leonov Relay (Europa)", ErisHUB: "Kuiper Relay (Eris)", PlutoHUB: "Orcus Relay (Pluto)" };
@@ -1226,6 +1278,7 @@ async function liveFromRaw() {
     teshin: null,
     fissures: fis,
     varzia: pv ? { expiry: ms(pv.Expiry), inventory: (pv.Manifest || []).map(x => ({ n: prettyPath(x.ItemType) })) } : null,
+    circuit: ((w.EndlessXpChoices || []).find(x => /HARD/.test(x.Category || "")) || {}).Choices || null,
   };
 }
 async function loadLive() {
@@ -1274,7 +1327,7 @@ applyTheme();
 trackTopbar();
 runIntro();
 buildMain(); buildFavs(); buildRuns(); renderDrawer();
-bindEvents(); bindPages(); bindDrawerGesture(); bindWeekly(); startHidden();
+bindEvents(); bindPages(); bindDrawerGesture(); bindWeekly(); bindPullRefresh(); startHidden();
 page = +S().startPage; if (!(page >= 0 && page <= 3)) page = PAGE_MAIN;
 requestAnimationFrame(() => goPage(page, false));
 loadCachedLive();

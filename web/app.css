@@ -676,3 +676,19 @@ li input:checked + .wtext{color:var(--done);text-decoration:line-through}
 .wsec li input.wtext{appearance:auto;-webkit-appearance:none;width:auto;height:auto;display:block;border:0;border-bottom:1px dashed var(--line);border-radius:0;place-items:initial}
 .wsec li input.wtext:focus{border-bottom-color:var(--gold)}
 .topbar .menubtn{flex:none}
+
+/* ---------- ROTATING DROPDOWNS ---------- */
+.rots{display:flex;flex-direction:column;gap:10px}
+details.rot > summary{list-style:none;display:flex;align-items:baseline;gap:10px;min-height:48px;padding:12px 14px;cursor:pointer;
+  background:linear-gradient(180deg,var(--chead1),var(--chead2))}
+details.rot > summary::-webkit-details-marker{display:none}
+details.rot > summary::after{content:"";margin-left:auto;align-self:center;width:8px;height:8px;border-right:2px solid var(--gold);border-bottom:2px solid var(--gold);transform:rotate(-45deg);transition:transform .15s}
+details.rot[open] > summary::after{transform:rotate(45deg)}
+details.rot[open] > summary{border-bottom:1px solid var(--line)}
+.rname{font:700 19px/1.1 var(--fh);letter-spacing:.05em;text-transform:uppercase;color:var(--gold2)}
+.rnote{font:italic 400 12px var(--fb);color:var(--muted);position:relative;top:1px;margin-left:2px;white-space:nowrap}
+.rbody{padding-bottom:4px}
+.fisstoggle{margin-top:12px}
+.ptr{position:absolute;left:0;right:0;top:calc(var(--toph,92px) - 30px);text-align:center;font:600 12px var(--fh);letter-spacing:.08em;text-transform:uppercase;color:var(--gold);opacity:0;pointer-events:none;transition:transform .2s,opacity .2s;z-index:5}
+.page{position:relative}
+details.rot{display:block}
