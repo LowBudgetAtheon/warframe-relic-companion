@@ -34,6 +34,7 @@ const SHOW_SWITCHES = [
   ["oracle", "Oracle text"],
   ["tips", "Item notes"],
   ["get", "Acquisition source"],
+  ["whatsnew", "What's new pop-up"],
 ];
 const START_PAGES = [[0, "Rotating"], [1, "Relic Runs"], [2, "Favorites"], [3, "Main"]];
 const CATS = [
@@ -48,7 +49,7 @@ const RAR_ORDER = { R: 0, U: 1, C: 2 };
 const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
 const DEFAULT_SETTINGS = {
   theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {},
-  show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true },
+  show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true, whatsnew: true },
   reduceMotion: false, compact: false, textSize: 100, startPage: 3, fissMode: "normal",
 };
 const native = window.WRC || null; // Android bridge, absent in a normal browser
@@ -94,7 +95,7 @@ function normaliseState(s) {
   const st = s.settings || {};
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
+    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] }, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
@@ -720,7 +721,8 @@ function renderDrawer() {
       <div class="controls"><button class="chip" id="bkCopy">Copy backup code</button></div>
       <textarea id="bkIn" placeholder="Paste a backup code here to restore" spellcheck="false"></textarea>
       <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><span class="toast" data-toast></span></div>
-      <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>`;
+      <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
+    <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
 }
 function applyDisplay() {
   const st = S(), b = document.body.classList;
@@ -881,6 +883,65 @@ function openVault(itemId) {
 }
 const closeModal = () => { $("#modalRoot").innerHTML = ""; };
 
+/* ---------- TOUR + WHAT'S NEW ---------- */
+const TOUR = [
+  ["Welcome to Relic Companion", "Track every Prime part you still need, which relics drop them, and where to farm those relics."],
+  ["Four pages", "Swipe left and right, or tap the tabs: <b>Rotating</b> (vendors and weekly rewards), <b>Relic Runs</b> (what to crack and live fissures), <b>Favorites</b> and <b>Main</b> (every Prime)."],
+  ["Star, tick, tap", "Tap ☆ to add an item to Favorites. Tick parts as you get them. Tap an item's name for its relics, best farms and other info."],
+  ["Two side panels", "Swipe in from the left edge, or tap the menu button, for <b>Settings</b>. Swipe in from the right edge, or tap the checklist button, for your <b>daily and weekly checklist</b>."],
+  ["Keep your progress safe", "Ticks are saved on this phone. Use <b>Copy backup code</b> in Settings to move them to a new phone. To see this tour again, tap the <b>?</b> at the bottom of the Settings menu."],
+];
+/* Update WHATS_NEW with each APK release: friends see it once after updating. */
+const WHATS_NEW = {
+  id: "2026-11-a",
+  items: [
+    "A–Z sort on All, and collapsible Primary, Secondary and Melee sections on Weapons.",
+    "Primes that don't come from relics, with a How to get note.",
+    "New Duviri theme, plus a tidier Settings menu with new info switches, Reduce motion, Compact cards, Text size and Start page.",
+    "A daily and weekly checklist: swipe in from the right edge.",
+    "Rotating sections fold up, and show this week's Steel Path Circuit Incarnons. Relic Runs gets a Normal / Steel Path fissure toggle. Pull down to refresh.",
+    "Some days look a little different. And a few secrets are hidden around the app…",
+  ],
+};
+function showTour() {
+  state.tourDone = true; state.newsSeen = WHATS_NEW.id; save();
+  let i = 0;
+  const draw = () => {
+    const [t, b] = TOUR[i], last = i === TOUR.length - 1;
+    $("#modalRoot").innerHTML = `<div class="modal tour" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">${t}</div>
+      <div class="meta"><span class="tag">Tour</span><span>${i + 1} / ${TOUR.length}</span></div></div>
+      <div class="mbody"><p>${b}</p><div class="dots">${TOUR.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div></div>
+      <div class="tourbtns">${last ? "" : `<button class="chip ghost" data-close>Skip</button>`}${i ? `<button class="chip ghost" data-tprev>Back</button>` : ""}<button class="chip" ${last ? "data-close" : "data-tnext"}>${last ? "Done" : "Next"}</button></div></article></div>`;
+  };
+  draw();
+  const root = $("#modalRoot");
+  const onClick = e => {
+    if (!$("#modal") || !$("#modal").classList.contains("tour")) { root.removeEventListener("click", onClick); return; }
+    if (e.target.closest("[data-tnext]")) { i = Math.min(TOUR.length - 1, i + 1); draw(); }
+    if (e.target.closest("[data-tprev]")) { i = Math.max(0, i - 1); draw(); }
+  };
+  root.addEventListener("click", onClick);
+  let x0 = null;
+  root.ontouchstart = e => { x0 = e.touches[0].clientX; };
+  root.ontouchend = e => {
+    if (x0 == null || !$("#modal") || !$("#modal").classList.contains("tour")) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (dx < -50 && i < TOUR.length - 1) { i++; draw(); } else if (dx > 50 && i > 0) { i--; draw(); }
+  };
+}
+function showWhatsNew() {
+  state.newsSeen = WHATS_NEW.id; save();
+  $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">What's new</div></div>
+    <div class="mbody"><ul class="news">${WHATS_NEW.items.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+    <p class="secsub" style="margin:8px 0 0">You can turn this off under Settings › Info shown.</p></div>
+    <button class="builtbtn" data-close>Got it</button></article></div>`;
+}
+function afterIntro() {
+  if ($("#modal") || document.querySelector(".stalker-take")) return;
+  if (!state.tourDone) showTour();
+  else if (state.newsSeen !== WHATS_NEW.id) { if (S().show.whatsnew) showWhatsNew(); else { state.newsSeen = WHATS_NEW.id; save(); } }
+}
+
 /* ---------- RENDER ALL ---------- */
 let renderQueued = 0;
 function renderAll() {
@@ -974,6 +1035,7 @@ function bindEvents() {
       } else { msg.className = "codemsg bad"; msg.textContent = "This code is invalid."; }
       return;
     }
+    if (e.target.id === "tourBtn") { setDrawer(false); setTimeout(showTour, 250); return; }
     if (e.target.id === "bkCopy") {
       const code = await makeBackup(); const ok = await copyText(code);
       $("#bkIn").value = code; say(e.target, ok ? "Backup code copied" : "Copy blocked: the code is in the box below"); return;
@@ -1308,7 +1370,7 @@ setInterval(renderUpdated, 30000);
 function runIntro() {
   const el = $("#intro");
   const reduce = S().reduceMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-  const done = () => { if (el.classList.contains("done")) return; el.classList.add("done"); setTimeout(() => el.remove(), 500); };
+  const done = () => { if (el.classList.contains("done")) return; el.classList.add("done"); setTimeout(() => { el.remove(); afterIntro(); }, 500); };
   const later = () => { if (Date.now() < (window.__introHold || 0)) setTimeout(later, 200); else done(); };
   setTimeout(later, reduce ? 400 : 1900);
 }

@@ -79,3 +79,9 @@ Each `id` must be new. A changed or new secret reaches phones with the next APK.
 On these days the app uses a one-day theme, then goes back to the chosen theme:
 Christmas, Halloween, New Year's Day, the spring and autumn equinoxes (worked out
 each year), and 7/7. Birthday days only exist on phones where their code was entered.
+
+## "What's new" card
+
+`WHATS_NEW` near the tour code in `web/app.js` lists the changes shown once after an
+update. Give it a new `id` and items with each release you want announced; anyone who
+turned the pop-up off under Settings › Info shown won't see it.
