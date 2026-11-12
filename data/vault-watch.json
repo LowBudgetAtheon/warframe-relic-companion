@@ -1,0 +1,4 @@
+{
+  "_about": "Vault Watch entries, edited by hand when DE announces a vaulting or a Prime Resurgence lineup. Starred items that match get the red exclamation mark until 'until' passes. type: 'vaulting' or 'resurgence'. Match by item name in 'items' and/or by relic in 'relics'. 'id' must be unique (change it if you reuse an entry so the pulse comes back). Example: {\"id\": \"vault-2026-12\", \"type\": \"vaulting\", \"items\": [\"Ash Prime\", \"Vectis Prime\"], \"until\": \"2026-12-10\", \"title\": \"Relics may be vaulted soon\", \"note\": \"DE announced these relics leave the drop tables with the next Prime Access.\"}. Varzia's current Prime Resurgence stock is detected automatically from the live feed, so it doesn't need an entry here.",
+  "entries": []
+}

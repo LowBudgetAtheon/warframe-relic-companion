@@ -1,0 +1,47 @@
+name: Update relic data
+
+# Rebuilds data/relics.json from the WARFRAME Wiki, DE's drop tables and WFCD
+# data, and merges in the hand-edited files. Every installed app downloads the
+# new file the next time it opens. Pushes made here don't trigger the APK build.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/build-data.mjs"
+      - "data/community-farms.json"
+      - "data/vault-watch.json"
+      - "data/overrides.json"
+      - ".github/workflows/update-data.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build data/relics.json
+        run: node scripts/build-data.mjs --merge-only-on-failure
+
+      - name: Commit it if anything changed
+        run: |
+          if git diff --quiet -- data/relics.json; then echo "No data changes."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/relics.json
+          git commit -m "Update relic data"
+          git pull --rebase origin main
+          git push

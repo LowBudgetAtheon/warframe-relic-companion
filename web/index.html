@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<title>Warframe Relic Companion</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-theme="orokin-dark">
+
+<div id="intro" aria-hidden="true">
+  <div>
+    <svg viewBox="0 0 150 150">
+      <path class="ln" d="M75 6 L144 75 L75 144 L6 75 Z"/>
+      <path class="ln b" d="M75 26 L124 75 L75 124 L26 75 Z"/>
+      <path class="ln c" d="M75 6 V40 M75 110 V144 M6 75 H40 M110 75 H144"/>
+      <path class="ln b" d="M75 46 L104 75 L75 104 L46 75 Z"/>
+      <path class="core" d="M75 60 L90 75 L75 90 L60 75 Z"/>
+    </svg>
+    <div class="ttl">Relic Companion<small>Warframe</small></div>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="in">
+    <button class="menubtn" id="menuBtn" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    </button>
+    <nav class="tabs" id="tabs">
+      <a data-page="0">Rotating</a>
+      <a data-page="1">Relic Runs</a>
+      <a data-page="2">Favorites</a>
+      <a data-page="3">Main</a>
+    </nav>
+  </div>
+  <div class="updated" id="updated"></div>
+</div>
+
+<main class="pages" id="pages">
+  <section class="page" id="pg-rotating"><div class="wrap" id="rotating"></div></section>
+  <section class="page" id="pg-runs"><div class="wrap" id="runs"></div></section>
+  <section class="page" id="pg-favs"><div class="wrap" id="favs"></div></section>
+  <section class="page" id="pg-main"><div class="wrap" id="main"></div></section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Menu"></aside>
+<div id="modalRoot"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

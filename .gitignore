@@ -1,0 +1,12 @@
+# Android build output and the web files copied in by the workflow
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/www/
+# Never commit signing keys
+*.jks
+*.keystore
+signing-key*.txt
+.DS_Store
+node_modules/
