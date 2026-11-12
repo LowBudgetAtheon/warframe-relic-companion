@@ -15,6 +15,14 @@ on:
       - "data/vault-watch.json"
       - "data/overrides.json"
       - ".github/workflows/update-data.yml"
+  # On a pull request it only checks that the data still builds; nothing is committed.
+  pull_request:
+    paths:
+      - "scripts/build-data.mjs"
+      - "data/community-farms.json"
+      - "data/vault-watch.json"
+      - "data/overrides.json"
+      - ".github/workflows/update-data.yml"
 
 permissions:
   contents: write
@@ -33,10 +41,20 @@ jobs:
         with:
           node-version: 20
 
+      - name: Get a backup copy of the WFCD data from npm
+        continue-on-error: true
+        run: |
+          cd "$RUNNER_TEMP"
+          npm pack @wfcd/items --silent
+          mkdir wfcd && tar xzf wfcd-items-*.tgz -C wfcd
+          echo "WFCD_DIR=$RUNNER_TEMP/wfcd/package/data/json" >> "$GITHUB_ENV"
+          ls wfcd/package/data/json | head -40
+
       - name: Build data/relics.json
         run: node scripts/build-data.mjs --merge-only-on-failure
 
       - name: Commit it if anything changed
+        if: github.event_name != 'pull_request'
         run: |
           if git diff --quiet -- data/relics.json; then echo "No data changes."; exit 0; fi
           git config user.name "github-actions[bot]"

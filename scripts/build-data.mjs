@@ -56,6 +56,11 @@ const VARIANT_PRE = /^(Kuva|Tenet|Prisma|Coda|Telos|Vaykor|Rakta|Sancti|Secura|S
 const VARIANT_SUF = /^(.+)\s+(Vandal|Wraith)$/;
 
 const log = (...a) => console.log("[data]", ...a);
+const GHA = !!process.env.GITHUB_ACTIONS;
+/* In GitHub Actions these show up as annotations on the run, readable without the full log */
+const note = m => { log(m); if (GHA) console.log(`::notice title=Data build::${String(m).replace(/\r?\n/g, " ")}`); };
+const warn = m => { log(m); if (GHA) console.log(`::warning title=Data build::${String(m).replace(/\r?\n/g, " ")}`); };
+const fail = m => { console.error("[data]", m); if (GHA) console.log(`::error title=Data build failed::${String(m).replace(/\r?\n/g, " ")}`); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function get(url, type = "json", tries = 3) {
@@ -69,12 +74,20 @@ async function get(url, type = "json", tries = 3) {
   }
   throw new Error(`${url}: ${last && last.message}`);
 }
+/* WFCD data: raw GitHub first, then the @wfcd/items npm package unpacked by the workflow (WFCD_DIR) */
 async function wfcd(file) {
-  let last;
+  const errs = [];
   for (const base of WFCD_BASES) {
-    try { return await get(base + encodeURIComponent(file) + ".json", "json", 2); } catch (e) { last = e; }
+    try {
+      const j = await get(base + encodeURIComponent(file) + ".json", "json", 2);
+      if (!Array.isArray(j)) throw new Error("not a list");
+      return j;
+    } catch (e) { errs.push(e.message); }
   }
-  throw last;
+  if (process.env.WFCD_DIR) {
+    try { return JSON.parse(await fs.readFile(`${process.env.WFCD_DIR}/${file}.json`, "utf8")); } catch (e) { errs.push(`npm copy: ${e.message}`); }
+  }
+  throw new Error(`WFCD ${file}.json unavailable (${errs.join(" | ")})`);
 }
 const readJSON = async (u, fallback) => { try { return JSON.parse(await fs.readFile(u, "utf8")); } catch (e) { return fallback; } };
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -167,20 +180,24 @@ async function wikiIncarnons() {
 async function build() {
   const overrides = await readJSON(OVERRIDES, {});
   const lists = {};
-  for (const [f] of FILES) lists[f] = await wfcd(f);
+  const CORE = new Set(["Primary", "Secondary", "Melee", "Warframes"]);
+  for (const [f] of FILES) {
+    try { lists[f] = await wfcd(f); }
+    catch (e) { if (CORE.has(f)) throw e; warn(`${e.message}; skipping that category`); lists[f] = []; }
+  }
   const mods = await wfcd("Mods").catch(e => { log("Mods.json failed:", e.message); return []; });
   const relicList = await wfcd("Relics").catch(e => { log("Relics.json failed:", e.message); return []; });
-  log("WFCD lists loaded:", Object.entries(lists).map(([k, v]) => `${k}=${v.length}`).join(" "));
+  note(`WFCD lists: ${Object.entries(lists).map(([k, v]) => `${k}=${v.length}`).join(", ")}, Mods=${mods.length}, Relics=${relicList.length}`);
 
   let drops = { missions: [], relicItems: {} };
   for (const u of DROP_TABLE_URLS) {
     try { drops = parseDropTables(await get(u, "text")); if (drops.missions.length) break; } catch (e) { log("drop tables", u, "failed:", e.message); }
   }
-  log("drop tables: mission relic rows", drops.missions.length, "relic reward names", Object.keys(drops.relicItems).length);
   const dropsOk = drops.missions.length > 200;
+  (dropsOk ? note : warn)(`DE drop tables: ${drops.missions.length} mission relic rows, ${Object.keys(drops.relicItems).length} relic reward names${dropsOk ? "" : " (too few, vault status falls back to WFCD)"}`);
 
   const wikiInc = await wikiIncarnons();
-  log("wiki incarnon genesis names:", wikiInc.size);
+  (wikiInc.size ? note : warn)(`Wiki Incarnon Genesis names found: ${wikiInc.size}`);
   const incBase = new Set([...wikiInc, ...(overrides.incarnonBases || [])]);
   for (const list of Object.values(lists)) for (const x of list) if (/ Incarnon Genesis$/.test(x.name || "")) incBase.add(x.name.replace(/ Incarnon Genesis$/, ""));
 
@@ -278,7 +295,7 @@ async function build() {
   } catch (e) { log("solNodes failed:", e.message); }
 
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
-  log("built", JSON.stringify(counts));
+  note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
 
   return {
@@ -324,7 +341,7 @@ async function main() {
   try {
     data = { ...(await build()), ...(await curated()) };
   } catch (e) {
-    console.error("[data] build failed:", e.message);
+    fail(e.message);
     if (!MERGE_ON_FAIL || !prev || prev.seed) process.exit(1);
     log("merging hand-edited files into the existing data instead");
     data = { ...prev, ...(await curated()) };
@@ -337,4 +354,4 @@ async function main() {
   log("wrote", OUT.pathname, (JSON.stringify(out).length / 1024).toFixed(0) + " KB");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { console.error(e); process.exit(1); });
+if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { fail(e.stack || e.message); process.exit(1); });
