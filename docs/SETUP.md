@@ -59,3 +59,23 @@ phone on its next launch.
 - `scripts/build-data.mjs`: the data builder.
 - `.github/workflows/`: `build-apk.yml` (APK + release), `update-data.yml` (data).
 - `legacy/prime-checklist.html`: the original prototype the look comes from.
+
+## Secret codes ("Enter code" in the side menu)
+
+Secrets such as the birthday events are stored **encrypted** in `web/secrets.js`, so the
+public repo and the APK reveal nothing until someone types the right code. Codes ignore
+capital letters and spaces. The codes themselves are never saved in the repo.
+
+To add one (Claude normally does this for you):
+
+```
+SECRET_CODE="the code" node scripts/add-secret.mjs '{"type":"birthday","id":"bd-3","name":"…","month":1,"day":2,"message":"…","theme":"sd-b1"}'
+```
+
+Each `id` must be new. A changed or new secret reaches phones with the next APK.
+
+## Special days
+
+On these days the app uses a one-day theme, then goes back to the chosen theme:
+Christmas, Halloween, New Year's Day, the spring and autumn equinoxes (worked out
+each year), and 7/7. Birthday days only exist on phones where their code was entered.

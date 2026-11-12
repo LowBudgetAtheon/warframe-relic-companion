@@ -22,14 +22,20 @@ const THEMES = [
   ["infested", "Infested", ["#131a0f", "#a6c93a", "#c95f80"]],
   ["void", "Void", ["#04080a", "#7ef2d8", "#cbfff2"]],
   ["sentient", "Sentient", ["#1e1915", "#e0cdb0", "#a57d4b"]],
+  ["duviri", "Duviri", ["#e8d9b8", "#b23b24", "#c66b23"]],
 ];
+const LIGHT_THEMES = new Set(["orokin-light", "duviri", "sd-spring"]);
 const SHOW_SWITCHES = [
   ["mods", "Unique mods"],
   ["chances", "Drop chances"],
   ["vaulted", "Vaulted relic lists"],
   ["resurgence", "Prime Resurgence notes"],
   ["variants", "Variant info"],
+  ["oracle", "Oracle text"],
+  ["tips", "Item notes"],
+  ["get", "Acquisition source"],
 ];
+const START_PAGES = [[0, "Rotating"], [1, "Relic Runs"], [2, "Favorites"], [3, "Main"]];
 const CATS = [
   ["all", "All Primes"], ["weapons", "Weapons"], ["warframes", "Warframes"], ["archwing", "Archwing"],
   ["archgun", "Arch-gun"], ["archmelee", "Arch-melee"], ["companions", "Companions"], ["other", "Other"],
@@ -40,7 +46,11 @@ const TIER_ORDER = { Lith: 0, Meso: 1, Neo: 2, Axi: 3, Requiem: 4, Omnia: 5 };
 const RAR = { C: "Common", U: "Uncommon", R: "Rare" };
 const RAR_ORDER = { R: 0, U: 1, C: 2 };
 const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
-const DEFAULT_SETTINGS = { theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true } };
+const DEFAULT_SETTINGS = {
+  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {},
+  show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true },
+  reduceMotion: false, compact: false, textSize: 100, startPage: 3,
+};
 const native = window.WRC || null; // Android bridge, absent in a normal browser
 
 /* ---------- SMALL HELPERS ---------- */
@@ -84,7 +94,7 @@ function normaliseState(s) {
   const st = s.settings || {};
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin,
+    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {},
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
@@ -280,8 +290,8 @@ function cardHTML(it) {
   });
   if (open) h += `</ul></details></li>`;
   h += `</ul>`;
-  if (it.note) h += `<div class="note">${esc(it.note)}</div>`;
-  if (it.get) h += `<div class="note"><b>How to get:</b> ${esc(it.get)}</div>`;
+  if (it.note) h += `<div class="note tip">${esc(it.note)}</div>`;
+  if (it.get) h += `<div class="note get"><b>How to get:</b> ${esc(it.get)}</div>`;
   h += `<div class="more${expanded.has(it.id) ? "" : " hidden"}">${expanded.has(it.id) ? moreHTML(it) : ""}</div>`;
   h += `<div class="cfoot"><button class="builtbtn" data-mastered="${it.id}">${isM ? "Mastered ✓" : "Mastered"}</button><button class="expbtn" data-exp="${it.id}">${expanded.has(it.id) ? "Hide info ▴" : "Relics & info ▾"}</button></div></article>`;
   return h;
@@ -669,26 +679,142 @@ function renderUpdated() {
 
 /* ---------- DRAWER ---------- */
 function renderDrawer() {
-  const st = S();
+  const st = S(), sd = specialDay();
+  const sw = (k, l) => `<label class="tgl"><span>${l}</span><input type="checkbox" data-show="${k}"${st.show[k] ? " checked" : ""}></label>`;
   $("#drawer").innerHTML = `<h2>Settings</h2>
-    <h3>Theme</h3><div class="themes">${THEMES.map(([k, l, sw]) => `<button class="themebtn" data-theme-set="${k}" aria-pressed="${st.theme === k}"><span class="sw">${sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>${l}</button>`).join("")}</div>
-    <h3>Show</h3>${SHOW_SWITCHES.map(([k, l]) => `<label class="tgl"><span>${l}</span><input type="checkbox" data-show="${k}"${st.show[k] ? " checked" : ""}></label>`).join("")}
-    <p class="always">Always shown: current fissures, relic rarity badges and Incarnon info. Variant info always shows inside the Incarnon &amp; variants dropdown.</p>
+    <details class="dsec"><summary>Theme</summary><div class="dbody">
+      ${sd ? `<div class="sdnote">${esc(sd.label)} theme is on today. Your theme comes back tomorrow.</div>` : ""}
+      <div class="themes">${THEMES.map(([k, l, sw]) => `<button class="themebtn" data-theme-set="${k}" aria-pressed="${st.theme === k}"><span class="sw">${sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>${l}</button>`).join("")}</div>
+    </div></details>
+    <details class="dsec"><summary>Info shown</summary><div class="dbody">
+      ${SHOW_SWITCHES.map(([k, l]) => sw(k, l)).join("")}
+      <p class="always">Always shown: current fissures, relic rarity badges and Incarnon info. Variant info always shows inside the Incarnon &amp; variants dropdown. Oracle text is the explanations under page titles and at the bottom of pages.</p>
+    </div></details>
+    <h3>Display</h3>
+    <label class="tgl"><span>Reduce motion</span><input type="checkbox" data-disp="reduceMotion"${st.reduceMotion ? " checked" : ""}></label>
+    <label class="tgl"><span>Compact cards</span><input type="checkbox" data-disp="compact"${st.compact ? " checked" : ""}></label>
+    <div class="drow"><label for="tsize">Text size</label><input id="tsize" type="range" min="85" max="130" step="5" value="${st.textSize}"><output id="tsizeOut">${st.textSize}%</output></div>
+    <div class="drow"><label for="startSel">Start page</label><select id="startSel" class="dsel">${START_PAGES.map(([v, l]) => `<option value="${v}"${+st.startPage === v ? " selected" : ""}>${l}</option>`).join("")}</select></div>
     <h3>Best farm source</h3>
     <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
     <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
     <div class="spacer"></div>
+    <h3>Enter code</h3>
+    <div class="codebox"><input id="codeIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code"><button class="chip" id="codeBtn">Unlock</button></div>
+    <div class="codemsg" id="codeMsg" role="status"></div>
     <div class="backup"><h3>Backup / restore code</h3>
       <div class="controls"><button class="chip" id="bkCopy">Copy backup code</button></div>
       <textarea id="bkIn" placeholder="Paste a backup code here to restore" spellcheck="false"></textarea>
       <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><span class="toast" data-toast></span></div>
       <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>`;
 }
+function applyDisplay() {
+  const st = S(), b = document.body.classList;
+  b.toggle("no-oracle", !st.show.oracle);
+  b.toggle("no-tips", !st.show.tips);
+  b.toggle("no-get", !st.show.get);
+  b.toggle("compact", !!st.compact);
+  b.toggle("reduce-motion", !!st.reduceMotion);
+  document.documentElement.style.setProperty("--ts", String((+st.textSize || 100) / 100));
+}
 function applyTheme() {
-  document.body.dataset.theme = S().theme;
+  const sd = specialDay();
+  const t = sd ? sd.theme : S().theme;
+  document.body.dataset.theme = t;
   const bg = getComputedStyle(document.body).getPropertyValue("--bg").trim();
   document.querySelector('meta[name="theme-color"]').setAttribute("content", bg);
-  if (native && native.setBarColor) try { native.setBarColor(bg, S().theme === "orokin-light"); } catch (e) {}
+  if (native && native.setBarColor) try { native.setBarColor(bg, LIGHT_THEMES.has(t)); } catch (e) {}
+  decorate(sd);
+}
+
+/* ---------- SPECIAL DAYS ----------
+   A special day's theme replaces the chosen one for that whole day (phone's local
+   date), then the chosen theme returns. Birthdays only exist once their code has
+   been entered on this phone. */
+const EQ_TERMS = [[485,324.96,1934.136],[203,337.23,32964.467],[199,342.08,20.186],[182,27.85,445267.112],[156,73.14,45036.886],[136,171.52,22518.443],[77,222.54,65928.934],[74,296.72,3034.906],[70,243.58,9037.513],[58,119.81,33718.147],[52,297.17,150.678],[50,21.02,2281.226],[45,247.54,29929.562],[44,325.15,31555.956],[29,60.93,4443.417],[18,155.12,67555.328],[17,288.79,4562.452],[16,198.04,62894.029],[14,199.76,31436.921],[12,95.39,14577.848],[12,287.11,31931.756],[12,320.81,34777.259],[9,227.73,1222.114],[8,15.45,16859.074]];
+function equinox(year, autumn) { // Meeus, Astronomical Algorithms ch. 27: within a couple of minutes
+  const Y = (year - 2000) / 1000, rad = Math.PI / 180;
+  const j0 = autumn
+    ? 2451810.21715 + 365242.01767 * Y - 0.11575 * Y * Y + 0.00337 * Y ** 3 + 0.00078 * Y ** 4
+    : 2451623.80984 + 365242.37404 * Y + 0.05169 * Y * Y - 0.00411 * Y ** 3 - 0.00057 * Y ** 4;
+  const T = (j0 - 2451545) / 36525, W = (35999.373 * T - 2.47) * rad;
+  const dl = 1 + 0.0334 * Math.cos(W) + 0.0007 * Math.cos(2 * W);
+  const S = EQ_TERMS.reduce((a, [A, B, C]) => a + A * Math.cos((B + C * T) * rad), 0);
+  const jde = j0 + 0.00001 * S / dl - 69 / 86400; // minus about a minute of TT-UTC difference
+  return new Date((jde - 2440587.5) * 86400000);
+}
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+function specialDay(now = new Date()) {
+  const m = now.getMonth() + 1, d = now.getDate(), y = now.getFullYear();
+  for (const x of Object.values(state.secrets || {})) {
+    if (x.type === "birthday" && x.month === m && x.day === d) return { id: x.id, theme: x.theme, label: `${x.name}'s birthday`, banner: x.message };
+  }
+  if (m === 12 && d === 25) return { id: "christmas", theme: "sd-christmas", label: "Christmas", fx: "snow" };
+  if (m === 10 && d === 31) return { id: "halloween", theme: "sd-halloween", label: "Halloween" };
+  if (m === 1 && d === 1) return { id: "newyear", theme: "sd-newyear", label: "New Year's", fx: "confetti" };
+  if (m === 7 && d === 7) return { id: "d77", theme: "sd-77", label: "7/7", fx: "buddy" };
+  if (sameDay(now, equinox(y, false))) return { id: "spring", theme: "sd-spring", label: "Spring equinox" };
+  if (sameDay(now, equinox(y, true))) return { id: "autumn", theme: "sd-autumn", label: "Autumn equinox" };
+  return null;
+}
+let decoFor = null;
+function decorate(sd) {
+  const key = sd ? sd.id : null;
+  if (decoFor === key) return;
+  decoFor = key;
+  document.querySelectorAll(".snow,.buddy,.bdbanner").forEach(e => e.remove());
+  if (!sd) return;
+  if (sd.fx === "snow") document.body.insertAdjacentHTML("beforeend", `<div class="snow" aria-hidden="true"></div>`);
+  if (sd.fx === "buddy") document.body.insertAdjacentHTML("beforeend", `<div class="buddy" aria-hidden="true"><svg viewBox="0 0 34 34">
+    <path d="M17 2 L25 10 L22 17 L25 24 L17 32 L9 24 L12 17 L9 10 Z" fill="#e9d29a" opacity=".9"/><path d="M17 8 L22 13 L17 17 L12 13 Z M17 17 L22 21 L17 26 L12 21 Z" fill="#fbf6e6" opacity=".55"/>
+    <circle class="eye" cx="17" cy="17" r="3.4" fill="#9fd6ff"/></svg></div>`);
+  if (sd.fx === "confetti" && !S().reduceMotion && !sessionStorage.getItem("wrc-confetti")) {
+    try { sessionStorage.setItem("wrc-confetti", "1"); } catch (e) {}
+    setTimeout(confettiBurst, document.getElementById("intro") ? 2000 : 0); // after the launch animation
+  }
+  const yk = `${sd.id}-${new Date().getFullYear()}`;
+  if (sd.banner && !state.banners[yk]) {
+    state.banners[yk] = 1; save();
+    document.body.insertAdjacentHTML("beforeend", `<div class="bdbanner" role="status">${esc(sd.banner)}<button aria-label="Dismiss" data-bdclose>×</button></div>`);
+    document.querySelector("[data-bdclose]").addEventListener("click", e => e.target.parentElement.remove());
+  }
+}
+function confettiBurst() {
+    const cols = ["#ff3fa4", "#3ff0ff", "#b6ff3f", "#ffd23f", "#a35cff"];
+    for (let i = 0; i < 70; i++) {
+      const c = document.createElement("i");
+      c.className = "confetti";
+      c.style.cssText = `left:${Math.random() * 100}vw;background:${cols[i % cols.length]};--dx:${(Math.random() - .5) * 120}px;--rot:${360 + Math.random() * 720}deg;--dur:${2 + Math.random() * 1.8}s;--delay:${Math.random() * .6}s`;
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 5000);
+    }
+}
+function blinkBuddy() {
+  const b = document.querySelector(".buddy"); if (!b) return;
+  b.classList.add("blink"); setTimeout(() => b.classList.remove("blink"), 160);
+}
+setInterval(() => { // roll over to the next day's theme if the app stays open past midnight
+  const sd = specialDay();
+  if ((sd ? sd.id : null) !== decoFor) { applyTheme(); renderDrawer(); }
+}, 60000);
+
+/* ---------- SECRET CODES ----------
+   Each secret is encrypted (AES-GCM, key from PBKDF2-SHA256 of the code) so the
+   public code reveals nothing. Codes ignore capitals and spaces. Add new ones with
+   scripts/add-secret.mjs (it writes web/secrets.js); the codes are never stored. */
+const SEC = window.WRC_SECRETS || { salt: "", iter: 1, list: [] }; // from secrets.js
+async function tryCode(raw) {
+  const code = String(raw || "").toLowerCase().replace(/\s+/g, "");
+  if (!code || !SEC.list.length || !window.crypto || !crypto.subtle) return null;
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt: unb64u(SEC.salt), iterations: SEC.iter }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  for (const x of SEC.list) {
+    try {
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64u(x.i) }, key, unb64u(x.c));
+      return JSON.parse(new TextDecoder().decode(pt));
+    } catch (e) { /* wrong code for this one */ }
+  }
+  return null;
 }
 
 /* ---------- BACKUP CODE ---------- */
@@ -696,7 +822,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -710,7 +836,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -757,7 +883,7 @@ function bindEvents() {
   const pages = $("#pages");
   pages.addEventListener("change", e => {
     const u = e.target.dataset.u; if (!u) return;
-    if (e.target.checked) state.ticks[u] = 1; else delete state.ticks[u];
+    if (e.target.checked) { state.ticks[u] = 1; blinkBuddy(); } else delete state.ticks[u];
     save(); refreshCards(e.target.dataset.it); queueDerived();
   });
   pages.addEventListener("click", async e => {
@@ -815,6 +941,16 @@ function bindEvents() {
     if (th) { S().theme = th.dataset.themeSet; save(); applyTheme(); dr.querySelectorAll("[data-theme-set]").forEach(b => b.setAttribute("aria-pressed", b === th)); return; }
     const f = e.target.closest("[data-farm]");
     if (f) { S().farm = f.dataset.farm; save(); renderDrawer(); renderOpenCards(); return; }
+    if (e.target.id === "codeBtn") {
+      const msg = $("#codeMsg"); msg.className = "codemsg"; msg.textContent = "Checking…";
+      const got = await tryCode($("#codeIn").value);
+      if (got && got.id) {
+        state.secrets[got.id] = got; save();
+        msg.className = "codemsg ok"; msg.textContent = "Secret unlocked!"; $("#codeIn").value = "";
+        applyTheme();
+      } else { msg.className = "codemsg bad"; msg.textContent = "This code is invalid."; }
+      return;
+    }
     if (e.target.id === "bkCopy") {
       const code = await makeBackup(); const ok = await copyText(code);
       $("#bkIn").value = code; say(e.target, ok ? "Backup code copied" : "Copy blocked: the code is in the box below"); return;
@@ -824,18 +960,25 @@ function bindEvents() {
       let next;
       try { next = await readBackup($("#bkIn").value); } catch (err) { say(btn, "That code doesn't look right"); return; }
       if (!btn._armed) { btn._armed = 1; btn.textContent = "Tap again to replace this phone's progress"; setTimeout(() => { btn._armed = 0; btn.textContent = "Restore"; }, 4000); return; }
-      state = next; save(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
+      state = next; save(); decoFor = undefined; applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
     }
   });
   dr.addEventListener("change", e => {
-    const k = e.target.dataset.show; if (!k) return;
-    S().show[k] = e.target.checked; save(); renderOpenCards();
+    const t = e.target;
+    if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
+    if (t.dataset.disp) { S()[t.dataset.disp] = t.checked; save(); applyDisplay(); return; }
+    if (t.id === "startSel") { S().startPage = +t.value; save(); }
   });
+  dr.addEventListener("input", e => {
+    if (e.target.id !== "tsize") return;
+    S().textSize = +e.target.value; $("#tsizeOut").textContent = e.target.value + "%"; save(); applyDisplay();
+  });
+  dr.addEventListener("keydown", e => { if (e.target.id === "codeIn" && e.key === "Enter") $("#codeBtn").click(); });
 }
 function renderOpenCards() { expanded.forEach(id => refreshCards(id)); }
 
 /* ---------- PAGES (swipe) ---------- */
-let page = PAGE_MAIN;
+let page = PAGE_MAIN; // replaced by the start page setting at launch
 function goPage(i, smooth) {
   const p = $("#pages");
   p.scrollTo({ left: i * p.clientWidth, behavior: smooth ? "smooth" : "auto" });
@@ -897,7 +1040,8 @@ function bindDrawerGesture() {
 window.wrcBack = function () {
   if ($("#modal")) { closeModal(); return true; }
   if (drawerOpen) { setDrawer(false); return true; }
-  if (page !== PAGE_MAIN) { goPage(PAGE_MAIN, true); return true; }
+  const home = +S().startPage || 0;
+  if (page !== home) { goPage(home, true); return true; }
   return false;
 };
 
@@ -1009,7 +1153,7 @@ setInterval(renderUpdated, 30000);
 /* ---------- INTRO ---------- */
 function runIntro() {
   const el = $("#intro");
-  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduce = S().reduceMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   const done = () => { if (el.classList.contains("done")) return; el.classList.add("done"); setTimeout(() => el.remove(), 500); };
   el.addEventListener("click", done);
   setTimeout(done, reduce ? 400 : 1900);
@@ -1024,12 +1168,14 @@ function trackTopbar() {
 }
 
 /* ---------- START ---------- */
+applyDisplay();
 applyTheme();
 trackTopbar();
 runIntro();
 buildMain(); buildFavs(); buildRuns(); renderDrawer();
 bindEvents(); bindPages(); bindDrawerGesture();
-requestAnimationFrame(() => goPage(PAGE_MAIN, false));
+page = +S().startPage; if (!(page >= 0 && page <= 3)) page = PAGE_MAIN;
+requestAnimationFrame(() => goPage(page, false));
 loadCachedLive();
 loadData().then(loadLive);
 setInterval(loadLive, LIVE_REFRESH_MS);
