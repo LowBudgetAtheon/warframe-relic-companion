@@ -1,0 +1,10 @@
+{
+  "_about": "Hand-picked 'Community-Driven' farms. 'tiers' covers every relic of that era; add an entry under 'relics' (e.g. \"Neo T5\": {...}) to override one relic. Fields: n = node, p = planet, t = mission type, r = rotation (optional), note = short tip (optional). After you edit this file the data workflow merges it into data/relics.json and every app picks it up on next launch.",
+  "tiers": {
+    "Lith": { "n": "Hepit", "p": "Void", "t": "Capture", "note": "near-guaranteed Lith, extract fast" },
+    "Meso": { "n": "Ukko", "p": "Void", "t": "Capture", "note": "drops Meso or Neo" },
+    "Neo": { "n": "Ukko", "p": "Void", "t": "Capture", "note": "drops Meso or Neo" },
+    "Axi": { "n": "Apollo", "p": "Lua", "t": "Disruption", "note": "Axi from later rounds" }
+  },
+  "relics": {}
+}

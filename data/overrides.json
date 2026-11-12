@@ -1,0 +1,14 @@
+{
+  "_about": "Corrections the data build applies on top of the downloaded sources. 'incarnonBases' adds base weapon names that have an Incarnon Genesis in case the wiki parse misses one. 'items' merges fields into a single item by exact name, e.g. {\"Tenora Prime\": {\"note\": \"...\"}}.",
+  "incarnonBases": [
+    "Braton", "Lato", "Skana", "Paris", "Kunai",
+    "Boar", "Gammacor", "Angstrum", "Gorgon", "Anku",
+    "Bo", "Latron", "Furis", "Furax", "Strun",
+    "Lex", "Magistar", "Boltor", "Bronco", "Ceramic Dagger",
+    "Torid", "Dual Toxocyst", "Dual Ichor", "Miter", "Atomos",
+    "Ack & Brunt", "Soma", "Vasto", "Nami Solo", "Burston",
+    "Zylok", "Sibear", "Dread", "Despair", "Hate",
+    "Dera", "Sybaris", "Cestra", "Sicarus", "Okina"
+  ],
+  "items": {}
+}

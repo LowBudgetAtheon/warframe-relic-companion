@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original Orokin-style diamond mark, same shapes as the in-app intro animation. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M54,24 L84,54 L54,84 L24,54 Z"
+        android:strokeColor="#D9B44A" android:strokeWidth="2.4" android:fillColor="#00000000" />
+    <path android:pathData="M54,33 L75,54 L54,75 L33,54 Z"
+        android:strokeColor="#F1D27A" android:strokeWidth="1.4" android:fillColor="#00000000" />
+    <path android:pathData="M54,24 L54,36 M54,72 L54,84 M24,54 L36,54 M72,54 L84,54"
+        android:strokeColor="#4FD1C5" android:strokeWidth="1.4" />
+    <path android:pathData="M54,45 L63,54 L54,63 L45,54 Z" android:fillColor="#F1D27A" />
+</vector>

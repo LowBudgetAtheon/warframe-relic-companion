@@ -1,0 +1,47 @@
+plugins {
+    id "com.android.application"
+}
+
+// Version and signing come from the GitHub Actions workflow (see docs/SETUP.md).
+def envOr = { String k, String d -> System.getenv(k) ?: d }
+
+android {
+    namespace "com.lowbudgetatheon.wfrelics"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.lowbudgetatheon.wfrelics"
+        minSdk 26
+        targetSdk 34
+        versionCode envOr("VERSION_CODE", "1") as int
+        versionName envOr("VERSION_NAME", "1.0.0-dev")
+    }
+
+    signingConfigs {
+        release {
+            def ks = System.getenv("KEYSTORE_FILE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "androidx.webkit:webkit:1.11.0"
+}
