@@ -692,3 +692,15 @@ details.rot[open] > summary{border-bottom:1px solid var(--line)}
 .ptr{position:absolute;left:0;right:0;top:calc(var(--toph,92px) - 30px);text-align:center;font:600 12px var(--fh);letter-spacing:.08em;text-transform:uppercase;color:var(--gold);opacity:0;pointer-events:none;transition:transform .2s,opacity .2s;z-index:5}
 .page{position:relative}
 details.rot{display:block}
+
+/* ---------- TOUR + WHAT'S NEW ---------- */
+.modal.tour .card{max-width:360px}
+.modal.tour .mbody p{font-size:14.5px;line-height:1.5}
+.dots{display:flex;gap:6px;justify-content:center;margin-top:10px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--gold)}
+.tourbtns{display:flex;justify-content:flex-end;gap:8px;padding:0 14px 14px}
+.news{padding:0 0 0 18px;margin:0;list-style:disc}
+.news li{padding:3px 0;font-size:13.5px}
+.helpbtn{align-self:flex-end;flex:none;width:34px;height:34px;margin-top:10px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);
+  color:var(--gold);font:700 17px var(--fh);cursor:pointer}
