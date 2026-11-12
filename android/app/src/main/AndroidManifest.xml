@@ -13,6 +13,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:label="@string/launcher_name"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
