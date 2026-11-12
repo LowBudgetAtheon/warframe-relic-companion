@@ -237,6 +237,51 @@ function labelFromId(itemName, seg) {
   return words || "Blueprint";
 }
 
+/* ---------- WARFRAME Wiki: the full Prime list, to catch items WFCD hasn't added yet ---------- */
+async function wikiPrimeList() {
+  const names = new Set();
+  for (const cat of ["Prime", "Primes", "Prime Weapons", "Prime Warframes", "Prime Companions"]) {
+    let cont = "";
+    for (let page = 0; page < 10; page++) {
+      try {
+        const j = await get(`${WIKI_API}?action=query&list=categorymembers&cmtitle=${encodeURIComponent("Category:" + cat)}&cmnamespace=0&cmlimit=500&format=json&formatversion=2${cont}`);
+        for (const m of (j.query && j.query.categorymembers) || []) {
+          const t = String(m.title).replace(/^(.+)\/Prime$/, "$1 Prime");
+          if (/(^| )Prime( |$)/.test(t) && !/\//.test(t)) names.add(t);
+        }
+        if (!j.continue || !j.continue.cmcontinue) break;
+        cont = `&cmcontinue=${encodeURIComponent(j.continue.cmcontinue)}`;
+      } catch (e) { break; }
+    }
+  }
+  return names;
+}
+async function wikiCategories(name) {
+  const tries = [name.replace(/ /g, "_"), name.replace(/ Prime$/, "/Prime").replace(/ /g, "_")];
+  for (const t of tries) {
+    try {
+      const j = await get(`${WIKI_API}?action=parse&page=${encodeURIComponent(t)}&prop=categories&format=json&formatversion=2&redirects=1`);
+      if (j.parse) return { title: j.parse.title, cats: (j.parse.categories || []).map(c => String(c.category).replace(/_/g, " ")) };
+    } catch (e) {}
+  }
+  return null;
+}
+function classify(cats) {
+  const c = cats.join(" | ");
+  if (/Exalted/i.test(c)) return null; // ability weapons like Regulators Prime aren't built
+  if (/Cosmetic|Syandana|Armor|Skin|Glyph|Sigil|Decoration|Ephemera|Accessor|Prime Access|Resurgence|Vault|Relic|Mod\b|Event|Quest|Character|Lore|Disambiguation/i.test(c) && !/Weapons|Warframes|Sentinels|Companions/i.test(c)) return null;
+  if (/Arch-?Gun/i.test(c)) return ["archgun", "Arch-gun", true];
+  if (/Arch-?Melee/i.test(c)) return ["archmelee", "Arch-melee", true];
+  if (/Sentinel Weapons|Robotic Weapons|Companion Weapons/i.test(c)) return ["companions", "Companion weapon", true];
+  if (/Archwing/i.test(c)) return ["archwing", "Archwing", false];
+  if (/Sentinels|Companions|Kubrow|Kavat|Collar/i.test(c)) return ["companions", "Companion", false];
+  if (/Primary Weapons/i.test(c)) return ["weapons", "Primary", true];
+  if (/Secondary Weapons/i.test(c)) return ["weapons", "Secondary", true];
+  if (/Melee Weapons/i.test(c)) return ["weapons", "Melee", true];
+  if (/Warframes/i.test(c)) return ["warframes", "Warframe", false];
+  return null;
+}
+
 /* ---------- build ---------- */
 async function build() {
   const overrides = await readJSON(OVERRIDES, {});
@@ -267,15 +312,18 @@ async function build() {
   for (const [f, , , isW] of FILES) if (isW) for (const x of lists[f]) if (x.name && !weaponsByName[x.name]) weaponsByName[x.name] = x;
 
   // pass 1: Prime items with relic-dropping parts
-  const seen = new Set(), raw = [];
+  const seen = new Set(), raw = [], notMasterable = [];
   for (const [f, cat, slot, isW] of FILES) {
     for (const x of lists[f]) {
       const name = x.name || "";
       if (seen.has(name) || !/(^| )Prime( |$)/.test(name) || !Array.isArray(x.components)) continue;
       seen.add(name);
+      if ((overrides.exclude || []).includes(name)) continue;
+      if (x.masterable === false) { notMasterable.push(name); continue; } // the app tracks mastery, so these don't belong
       raw.push({ x, cat, slot, isW });
     }
   }
+  if (notMasterable.length) note(`Left out as not masterable: ${notMasterable.join(", ").slice(0, 1500)}`);
   const primeNames = new Set(raw.map(r => r.x.name));
   const primeByUnique = Object.fromEntries(raw.filter(r => r.x.uniqueName).map(r => [r.x.uniqueName, r.x.name]));
 
@@ -380,6 +428,37 @@ async function build() {
     if (ov) Object.assign(it, ov);
     items.push(it);
   }
+  // Cross-check against the wiki's own Prime list: add anything WFCD is missing
+  {
+    const wikiPrimes = await wikiPrimeList();
+    if (!wikiPrimes.size) warn("Wiki Prime list came back empty; skipping the cross-check");
+    const have = new Set(items.map(i => i.n)), added = [], skipped = [];
+    const todo = [...wikiPrimes].filter(n => !have.has(n) && !notMasterable.includes(n) && !(overrides.exclude || []).includes(n)).sort().slice(0, 60);
+    for (const n of todo) {
+      const wc = await wikiCategories(n);
+      const cl = wc && classify(wc.cats);
+      if (!cl) { skipped.push(n); continue; }
+      const [cat, slot, isW] = cl;
+      const mine = Object.keys(rewardRelics).filter(nm => nm.startsWith(n + " ") && !byLen.some(o => o.length > n.length && o.startsWith(n + " ") && nm.startsWith(o + " ")));
+      const parts = mine.sort((a, b) => (a === `${n} Blueprint` ? -1 : 0) - (b === `${n} Blueprint` ? -1 : 0)).map(full => ({
+        p: full.slice(n.length + 1), full, c: 1, r: rewardRelics[full].slice().sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })),
+      }));
+      const it = { id: slug(n), n, cat, slot, parts, wiki: `https://wiki.warframe.com/w/${encodeURIComponent((wc.title || n).replace(/ /g, "_"))}`, fromWiki: 1 };
+      if (!parts.length) {
+        it.parts = [{ p: "Blueprint", full: `${n} Blueprint`, c: 1, r: [] }];
+        it.src = "other";
+        it.get = await wikiAcquisition(wc.title || n) || "Doesn't come from relics. See the wiki for how to get it.";
+      }
+      if (isW) { it.w = 1; it.inc = incBase.has(n.replace(/ Prime$/, "")) ? { g: `${n.replace(/ Prime$/, "")} Incarnon Genesis`, src: "the Steel Path Circuit (Duviri)" } : null; }
+      const ov = (overrides.items || {})[n];
+      if (ov) Object.assign(it, ov);
+      items.push(it);
+      added.push(`${n} [${slot}; ${parts.length ? parts.length + " relic parts" : "not from relics"}]`);
+    }
+    if (wikiPrimes.size) note(`Wiki cross-check: ${wikiPrimes.size} Prime pages; added ${added.length}: ${added.join(", ").slice(0, 1800)}`);
+    if (skipped.length) note(`Wiki Primes skipped as not gear: ${skipped.join(", ").slice(0, 1500)}`);
+  }
+
   // auto notes for weapons built from other weapons
   const byName = Object.fromEntries(items.map(i => [i.n, i]));
   for (const it of items) {
