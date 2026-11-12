@@ -225,6 +225,17 @@ async function build() {
       const c = Array.isArray(sample.components) ? sample.components : [];
       note(`Diag components: ${JSON.stringify(c.map(k => ({ n: k.name, u: k.uniqueName, c: k.itemCount, d: (k.drops || []).slice(0, 2) }))).slice(0, 900)}`);
     }
+    const ash = primes.find(x => x.name === "Ash Prime");
+    if (ash) note(`Diag Ash: ${JSON.stringify((ash.components || []).map(k => [k.uniqueName, k.itemCount, k.name]))}`);
+    const ak = primes.find(x => x.name === "Akvasto Prime");
+    if (ak) note(`Diag Akvasto: ${JSON.stringify((ak.components || []).map(k => [k.uniqueName, k.itemCount, k.name]))} vasto=${(primes.find(x => x.name === "Vasto Prime") || {}).uniqueName}`);
+    const rl = relicList.find(r => /^Axi A1/.test(r.name || "")) || relicList[0];
+    if (rl) note(`Diag relic: ${JSON.stringify(rl).slice(0, 900)}`);
+    note(`Diag relic names: ${relicList.slice(0, 6).map(r => r.name).join(" | ")}; vaulted count ${relicList.filter(r => r.vaulted).length}`);
+    const md = mods.find(m => m.compatName && /Ash|Boltor/i.test(m.compatName)) || mods[0];
+    if (md) note(`Diag mod: ${JSON.stringify({ name: md.name, compatName: md.compatName, isAugment: md.isAugment, drops: (md.drops || []).slice(0, 2), wikiaUrl: md.wikiaUrl })}`);
+    note(`Diag mods with compatName: ${mods.filter(m => m.compatName).length}, with drops: ${mods.filter(m => (m.drops || []).length).length}`);
+    note(`Diag Boltor vaulted=${sample && sample.vaulted} vaultDate=${sample && sample.vaultDate}; genesis in Misc: ${lists.Misc.filter(x => / Incarnon Genesis$/.test(x.name || "")).length}`);
     const de = Object.keys(drops.relicItems).filter(n => /Boltor Prime|Ash Prime/.test(n));
     note(`Diag DE names: ${de.join(" | ")}`);
   }
