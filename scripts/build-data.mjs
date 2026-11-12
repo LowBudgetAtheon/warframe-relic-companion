@@ -198,10 +198,27 @@ async function wikiAcquisition(name) {
     const secs = (sj.parse && sj.parse.sections) || [];
     const sec = secs.find(x => /^acquisition$/i.test(strip(String(x.line || "")))) || secs.find(x => strip(String(x.line || "")).toLowerCase() === name.toLowerCase());
     if (!sec) { acqWhy[name] = `no Acquisition section (sections: ${((sj.parse && sj.parse.sections) || []).map(x => x.line).join("/").slice(0, 120)})`; return null; }
-    const tj = await get(`${base}&prop=text&section=${sec.index}&disablelimitreport=1&disableeditsection=1`);
-    const html = (tj.parse && tj.parse.text) || "";
-    let plain = htmlPlain(html).replace(/^(Acquisition|[^.]{0,40}Prime)\s*/i, "").replace(/(\s*[·|]\s*)+/g, m => m.includes("|") ? ". " : ", ").replace(/^[,. ]+/, "");
-    if (plain.length < 20) { acqWhy[name] = `section text too short; html starts: ${html.replace(/\s+/g, " ").slice(0, 400)}`; return null; }
+    const clean0 = h => htmlPlain(h).replace(/^Acquisition\s*/i, "").replace(/(\s*[·|]\s*)+/g, m => m.includes("|") ? ". " : ", ").replace(/^[,. ]+/, "");
+    const clean = h => { const i = h.search(/<table/i); const pre = i > 0 ? clean0(h.slice(0, i)) : ""; return pre.length >= 40 ? pre : clean0(h); };
+    let html = "", plain = "";
+    if (/^\d+$/.test(String(sec.index))) {
+      const tj = await get(`${base}&prop=text&section=${sec.index}&disablelimitreport=1&disableeditsection=1`);
+      html = (tj.parse && tj.parse.text) || ""; plain = clean(html);
+    }
+    if (plain.length < 20) {
+      // Template-made sections can't be rendered alone: cut the section out of the full page
+      const fj = await get(`${base}&prop=text&disablelimitreport=1&disableeditsection=1`);
+      const full = (fj.parse && fj.parse.text) || "";
+      const anchor = sec.anchor || String(sec.line).replace(/ /g, "_");
+      const at = full.search(new RegExp(`id="${anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+      if (at >= 0) {
+        const after = full.slice(at);
+        const stop = after.slice(10).search(new RegExp(`<h${sec.level || 2}[\\s>]`, "i"));
+        html = stop >= 0 ? after.slice(0, stop + 10) : after.slice(0, 20000);
+        plain = clean(html.replace(/^[^>]*>/, "").replace(/^[\s\S]*?<\/h\d>/i, ""));
+      }
+    }
+    if (plain.length < 20) { acqWhy[name] = `section text too short (index ${sec.index}); html starts: ${html.replace(/\s+/g, " ").slice(0, 400)}`; return null; }
     const sentences = plain.match(/[^.!?]+[.!?]+(\s|$)/g) || [plain];
     let out = "";
     for (const x of sentences) { if ((out + x).length > 260 && out) break; out += x; }
