@@ -56,6 +56,11 @@ const VARIANT_PRE = /^(Kuva|Tenet|Prisma|Coda|Telos|Vaykor|Rakta|Sancti|Secura|S
 const VARIANT_SUF = /^(.+)\s+(Vandal|Wraith)$/;
 
 const log = (...a) => console.log("[data]", ...a);
+const GHA = !!process.env.GITHUB_ACTIONS;
+/* In GitHub Actions these show up as annotations on the run, readable without the full log */
+const note = m => { log(m); if (GHA) console.log(`::notice title=Data build::${String(m).replace(/\r?\n/g, " ")}`); };
+const warn = m => { log(m); if (GHA) console.log(`::warning title=Data build::${String(m).replace(/\r?\n/g, " ")}`); };
+const fail = m => { console.error("[data]", m); if (GHA) console.log(`::error title=Data build failed::${String(m).replace(/\r?\n/g, " ")}`); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function get(url, type = "json", tries = 3) {
@@ -69,12 +74,20 @@ async function get(url, type = "json", tries = 3) {
   }
   throw new Error(`${url}: ${last && last.message}`);
 }
+/* WFCD data: raw GitHub first, then the @wfcd/items npm package unpacked by the workflow (WFCD_DIR) */
 async function wfcd(file) {
-  let last;
+  const errs = [];
   for (const base of WFCD_BASES) {
-    try { return await get(base + encodeURIComponent(file) + ".json", "json", 2); } catch (e) { last = e; }
+    try {
+      const j = await get(base + encodeURIComponent(file) + ".json", "json", 2);
+      if (!Array.isArray(j)) throw new Error("not a list");
+      return j;
+    } catch (e) { errs.push(e.message); }
   }
-  throw last;
+  if (process.env.WFCD_DIR) {
+    try { return JSON.parse(await fs.readFile(`${process.env.WFCD_DIR}/${file}.json`, "utf8")); } catch (e) { errs.push(`npm copy: ${e.message}`); }
+  }
+  throw new Error(`WFCD ${file}.json unavailable (${errs.join(" | ")})`);
 }
 const readJSON = async (u, fallback) => { try { return JSON.parse(await fs.readFile(u, "utf8")); } catch (e) { return fallback; } };
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -167,20 +180,24 @@ async function wikiIncarnons() {
 async function build() {
   const overrides = await readJSON(OVERRIDES, {});
   const lists = {};
-  for (const [f] of FILES) lists[f] = await wfcd(f);
+  const CORE = new Set(["Primary", "Secondary", "Melee", "Warframes"]);
+  for (const [f] of FILES) {
+    try { lists[f] = await wfcd(f); }
+    catch (e) { if (CORE.has(f)) throw e; warn(`${e.message}; skipping that category`); lists[f] = []; }
+  }
   const mods = await wfcd("Mods").catch(e => { log("Mods.json failed:", e.message); return []; });
   const relicList = await wfcd("Relics").catch(e => { log("Relics.json failed:", e.message); return []; });
-  log("WFCD lists loaded:", Object.entries(lists).map(([k, v]) => `${k}=${v.length}`).join(" "));
+  note(`WFCD lists: ${Object.entries(lists).map(([k, v]) => `${k}=${v.length}`).join(", ")}, Mods=${mods.length}, Relics=${relicList.length}`);
 
   let drops = { missions: [], relicItems: {} };
   for (const u of DROP_TABLE_URLS) {
     try { drops = parseDropTables(await get(u, "text")); if (drops.missions.length) break; } catch (e) { log("drop tables", u, "failed:", e.message); }
   }
-  log("drop tables: mission relic rows", drops.missions.length, "relic reward names", Object.keys(drops.relicItems).length);
   const dropsOk = drops.missions.length > 200;
+  (dropsOk ? note : warn)(`DE drop tables: ${drops.missions.length} mission relic rows, ${Object.keys(drops.relicItems).length} relic reward names${dropsOk ? "" : " (too few, vault status falls back to WFCD)"}`);
 
   const wikiInc = await wikiIncarnons();
-  log("wiki incarnon genesis names:", wikiInc.size);
+  (wikiInc.size ? note : warn)(`Wiki Incarnon Genesis names found: ${wikiInc.size}`);
   const incBase = new Set([...wikiInc, ...(overrides.incarnonBases || [])]);
   for (const list of Object.values(lists)) for (const x of list) if (/ Incarnon Genesis$/.test(x.name || "")) incBase.add(x.name.replace(/ Incarnon Genesis$/, ""));
 
@@ -199,32 +216,72 @@ async function build() {
     }
   }
   const primeNames = new Set(raw.map(r => r.x.name));
+  const primeByUnique = Object.fromEntries(raw.filter(r => r.x.uniqueName).map(r => [r.x.uniqueName, r.x.name]));
+
+  /* Relic contents: WFCD Relics.json (every relic, vaulted ones too), then DE's tables */
+  const rewardRelics = {}, rewardByUnique = {};
+  const addReward = (name, relic, rar) => {
+    const l = rewardRelics[name] || (rewardRelics[name] = []);
+    if (!l.some(x => x[0] === relic)) l.push([relic, rar]);
+  };
+  for (const r of relicList) {
+    const rn = relicName(r.name);
+    if (!rn || !/Intact$/.test(r.name || "")) continue;
+    for (const w of r.rewards || []) {
+      const nm = w.item && w.item.name; if (!nm) continue;
+      addReward(nm, rn, RARMAP[w.rarity] || rarOf({ chance: (w.chance || 0) / 100 }));
+      if (w.item.uniqueName) rewardByUnique[w.item.uniqueName] = nm;
+    }
+  }
+  for (const [nm, l] of Object.entries(drops.relicItems)) for (const [rn, rar] of l) addReward(nm, rn, rar);
+  // each reward name belongs to the Prime item with the longest matching name
+  const byLen = [...primeNames].sort((a, b) => b.length - a.length);
+  const ownParts = {};
+  for (const nm of Object.keys(rewardRelics)) {
+    const owner = byLen.find(n => nm.startsWith(n + " "));
+    if (owner) (ownParts[owner] = ownParts[owner] || []).push(nm);
+  }
+  const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ALIAS = [[/helmet/g, "neuroptics"], [/component$/, ""], [/blueprint$/, ""]];
+  const key = t => ALIAS.reduce((v, [re, to]) => v.replace(re, to), norm(t));
+  let unmatched = 0, guessed = 0; const unmatchedIds = [], guessedNames = [];
+
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
-    const parts = [], req = [];
+    const req = new Map(), counts = new Map(), order = [];
+    const mine = ownParts[x.name] || [];
+    const byKey = Object.fromEntries(mine.map(nm => [key(nm), nm]));
+    // second chance: drop the item's own words and compare what's left ("PrimeDualKamasBlade" -> "blade")
+    const words = x.name.split(/\s+/).map(norm);
+    const resid = t => { let v = norm(t); for (const w of words) v = v.replace(w, ""); return ALIAS.reduce((q, [re, to]) => q.replace(re, to), v); };
+    const byResid = Object.fromEntries(mine.map(nm => [resid(nm), nm]));
     for (const c of x.components) {
-      const cname = c.name || "";
-      const isWhole = primeNames.has(cname) && !/\/Recipes\//.test(c.uniqueName || "");
-      if (isWhole) { req.push({ n: cname, c: c.itemCount || 1 }); continue; }
-      const rel = new Map();
-      let full = null;
-      for (const d of c.drops || []) {
-        const r = relicName(d.location); if (!r) continue;
-        if (!rel.has(r)) rel.set(r, rarOf(d));
-        if (!full && d.type && d.type.startsWith(x.name)) full = d.type;
+      const un = c.uniqueName || "";
+      if (primeByUnique[un] && primeByUnique[un] !== x.name) {
+        const n = primeByUnique[un]; req.set(n, (req.get(n) || 0) + (c.itemCount || 1)); continue;
       }
-      if (!full) full = cname === "Blueprint" ? `${x.name} Blueprint` : `${x.name} ${cname}`;
-      for (const k of [full, `${x.name} ${cname}`, `${x.name} ${cname} Blueprint`]) for (const [r, rar] of drops.relicItems[k] || []) if (!rel.has(r)) rel.set(r, rar);
-      if (!rel.size) continue; // resources like Orokin Cells
-      const label = full.startsWith(x.name + " ") ? full.slice(x.name.length + 1) : cname;
-      parts.push({ p: label, full, c: c.itemCount || 1, r: [...rel.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })) });
+      if (c.name && primeNames.has(c.name) && c.name !== x.name) { req.set(c.name, (req.get(c.name) || 0) + (c.itemCount || 1)); continue; }
+      let full = rewardByUnique[un] && rewardByUnique[un].startsWith(x.name + " ") ? rewardByUnique[un] : null;
+      if (!full) full = byKey[key(un.split("/").pop() || "")] || null;
+      if (!full && c.name) full = byKey[key(`${x.name} ${c.name}`)] || null;
+      if (!full) { const rk = resid(un.split("/").pop() || ""); if (rk) full = byResid[rk] || null; }
+      if (!full) { if (/Recipes\//.test(un)) { unmatched++; unmatchedIds.push(`${x.name}: ${un.split("/").pop()}`); } continue; } // resources like Orokin Cells
+      if (!counts.has(full)) order.push(full);
+      counts.set(full, (counts.get(full) || 0) + (c.itemCount || 1));
     }
+    for (const nm of mine) if (!counts.has(nm)) { order.push(nm); counts.set(nm, 1); guessed++; guessedNames.push(nm); }
+    order.sort((a, b) => (/ Blueprint$/.test(a) && a === `${x.name} Blueprint` ? -1 : 0) - (/ Blueprint$/.test(b) && b === `${x.name} Blueprint` ? -1 : 0));
+    const parts = order.map(full => ({
+      p: full.slice(x.name.length + 1), full, c: counts.get(full),
+      r: rewardRelics[full].slice().sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })),
+    }));
+    const reqList = [...req.entries()].map(([n, c]) => ({ n, c }));
     if (!parts.length) continue; // e.g. Founders items with no relics
     const base = x.name.replace(/ Prime$/, "");
     const it = { id: slug(x.name), n: x.name, cat, slot };
     if (x.vaulted != null) it.vaulted = !!x.vaulted;
     it.parts = parts;
-    if (req.length) it.req = req;
+    if (reqList.length) it.req = reqList;
     if (isW) {
       it.w = 1;
       it.inc = incBase.has(base) ? { g: `${base} Incarnon Genesis`, src: "the Steel Path Circuit (Duviri)" } : null;
@@ -278,7 +335,9 @@ async function build() {
   } catch (e) { log("solNodes failed:", e.message); }
 
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
-  log("built", JSON.stringify(counts));
+  note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics; ${unmatched} part IDs unmatched, ${guessed} parts with a guessed count of 1`);
+  if (unmatchedIds.length) warn(`Unmatched part IDs: ${unmatchedIds.join("; ")}`);
+  if (guessedNames.length) warn(`Guessed count of 1: ${guessedNames.join("; ")}`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
 
   return {
@@ -324,7 +383,7 @@ async function main() {
   try {
     data = { ...(await build()), ...(await curated()) };
   } catch (e) {
-    console.error("[data] build failed:", e.message);
+    fail(e.message);
     if (!MERGE_ON_FAIL || !prev || prev.seed) process.exit(1);
     log("merging hand-edited files into the existing data instead");
     data = { ...prev, ...(await curated()) };
@@ -337,4 +396,4 @@ async function main() {
   log("wrote", OUT.pathname, (JSON.stringify(out).length / 1024).toFixed(0) + " KB");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { console.error(e); process.exit(1); });
+if (import.meta.url === `file://${process.argv[1]}`) main().catch(e => { fail(e.stack || e.message); process.exit(1); });
