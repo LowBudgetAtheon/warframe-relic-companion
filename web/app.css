@@ -329,13 +329,19 @@ body.dragging .drawer,body.dragging .scrim{transition:none}
 #intro{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(800px 500px at 50% 45%,var(--glow) 0%,var(--bg) 70%);transition:opacity .45s ease}
 #intro.done{opacity:0;pointer-events:none}
 #intro svg{display:block;margin:0 auto;width:150px;height:150px;overflow:visible}
-#intro .ln{fill:none;stroke:var(--gold);stroke-width:2;stroke-dasharray:420;stroke-dashoffset:420;animation:draw 1s ease forwards}
-#intro .ln.b{stroke:var(--gold2);stroke-width:1.2;animation-delay:.2s}
-#intro .ln.c{stroke:var(--teal);stroke-width:1.2;animation-delay:.35s}
-#intro .core{fill:var(--gold2);transform-origin:75px 75px;transform:scale(0);animation:pop .5s .75s cubic-bezier(.3,1.6,.5,1) forwards}
+#intro .glow{fill:var(--teal);opacity:0;animation:fadein .8s .55s ease forwards}
+#intro .glow:not(.b){--o:.18}#intro .glow.b{--o:.28}
+#intro .sp{fill:var(--gold);transform-origin:54px 54px;transform:scale(.2);opacity:0;animation:spire .55s var(--d) cubic-bezier(.3,1.5,.5,1) forwards}
+#intro .sp.s{fill:var(--gold2)}
+#intro .ring{fill:none;stroke:var(--gold);stroke-width:2.4;stroke-dasharray:85;stroke-dashoffset:85;animation:draw .7s .2s ease forwards}
+#intro .dots{fill:none;stroke:#f4eedc;stroke-width:.9;stroke-dasharray:2.2 2.25;opacity:0;transform-origin:54px 54px;animation:dotspin 1.4s .5s ease-out forwards}
+#intro .core{fill:#cffff5;transform-origin:54px 54px;transform:scale(0);animation:pop .5s .75s cubic-bezier(.3,1.6,.5,1) forwards}
 #intro .ttl{margin-top:18px;text-align:center;font:700 22px Rajdhani,sans-serif;letter-spacing:.32em;text-transform:uppercase;color:var(--gold2);opacity:0;animation:rise .6s .9s ease forwards}
 #intro .ttl small{display:block;font:600 12px Rajdhani,sans-serif;letter-spacing:.5em;color:var(--muted);margin-top:4px}
 @keyframes draw{to{stroke-dashoffset:0}}
+@keyframes fadein{to{opacity:var(--o,1)}}
+@keyframes spire{to{transform:none;opacity:1}}
+@keyframes dotspin{from{opacity:0;transform:rotate(-40deg)}to{opacity:1;transform:none}}
 @keyframes pop{to{transform:scale(1)}}
 @keyframes rise{from{opacity:0;transform:translateY(8px);letter-spacing:.5em}to{opacity:1;transform:none;letter-spacing:.32em}}
 @media (prefers-reduced-motion:reduce){#intro *{animation-duration:.01s !important;animation-delay:0s !important}.vw.pulse::before{animation:none;opacity:.8}}
