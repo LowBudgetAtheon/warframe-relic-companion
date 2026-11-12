@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Original Orokin-style diamond mark, same shapes as the in-app intro animation. -->
+<!-- "Axi Crown": an original abstract take on an ornate Orokin relic, seen from above.
+     Same shapes as the in-app launch animation. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:pathData="M54,24 L84,54 L54,84 L24,54 Z"
-        android:strokeColor="#D9B44A" android:strokeWidth="2.4" android:fillColor="#00000000" />
-    <path android:pathData="M54,33 L75,54 L54,75 L33,54 Z"
-        android:strokeColor="#F1D27A" android:strokeWidth="1.4" android:fillColor="#00000000" />
-    <path android:pathData="M54,24 L54,36 M54,72 L54,84 M24,54 L36,54 M72,54 L84,54"
-        android:strokeColor="#4FD1C5" android:strokeWidth="1.4" />
-    <path android:pathData="M54,45 L63,54 L54,63 L45,54 Z" android:fillColor="#F1D27A" />
+    <path android:pathData="M40.00,54 a14,14 0 1,0 28.00,0 a14,14 0 1,0 -28.00,0" android:fillColor="#4FD1C5" android:fillAlpha="0.18"/>
+    <path android:pathData="M45.30,54 a8.7,8.7 0 1,0 17.40,0 a8.7,8.7 0 1,0 -17.40,0" android:fillColor="#4FD1C5" android:fillAlpha="0.28"/>
+    <path android:pathData="M54.00,39.00 L57.60,30.00 L54.00,21.00 L50.40,30.00 Z" android:fillColor="#D9B44A"/>
+    <path android:pathData="M69.00,54.00 L78.00,57.60 L87.00,54.00 L78.00,50.40 Z" android:fillColor="#D9B44A"/>
+    <path android:pathData="M54.00,69.00 L50.40,78.00 L54.00,87.00 L57.60,78.00 Z" android:fillColor="#D9B44A"/>
+    <path android:pathData="M39.00,54.00 L30.00,50.40 L21.00,54.00 L30.00,57.60 Z" android:fillColor="#D9B44A"/>
+    <path android:pathData="M65.31,42.69 L70.69,40.99 L72.38,35.62 L67.01,37.31 Z" android:fillColor="#F1D27A"/>
+    <path android:pathData="M65.31,65.31 L67.01,70.69 L72.38,72.38 L70.69,67.01 Z" android:fillColor="#F1D27A"/>
+    <path android:pathData="M42.69,65.31 L37.31,67.01 L35.62,72.38 L40.99,70.69 Z" android:fillColor="#F1D27A"/>
+    <path android:pathData="M42.69,42.69 L40.99,37.31 L35.62,35.62 L37.31,40.99 Z" android:fillColor="#F1D27A"/>
+    <path android:pathData="M40.50,54 a13.5,13.5 0 1,0 27.00,0 a13.5,13.5 0 1,0 -27.00,0" android:strokeColor="#D9B44A" android:strokeWidth="2.4" android:fillColor="#00000000"/>
+    <path android:pathData="M71.00,54.00 A17,17 0 0,1 70.85,56.22 M70.42,58.40 A17,17 0 0,1 69.71,60.51 M68.72,62.50 A17,17 0 0,1 67.49,64.35 M66.02,66.02 A17,17 0 0,1 64.35,67.49 M62.50,68.72 A17,17 0 0,1 60.51,69.71 M58.40,70.42 A17,17 0 0,1 56.22,70.85 M54.00,71.00 A17,17 0 0,1 51.78,70.85 M49.60,70.42 A17,17 0 0,1 47.49,69.71 M45.50,68.72 A17,17 0 0,1 43.65,67.49 M41.98,66.02 A17,17 0 0,1 40.51,64.35 M39.28,62.50 A17,17 0 0,1 38.29,60.51 M37.58,58.40 A17,17 0 0,1 37.15,56.22 M37.00,54.00 A17,17 0 0,1 37.15,51.78 M37.58,49.60 A17,17 0 0,1 38.29,47.49 M39.28,45.50 A17,17 0 0,1 40.51,43.65 M41.98,41.98 A17,17 0 0,1 43.65,40.51 M45.50,39.28 A17,17 0 0,1 47.49,38.29 M49.60,37.58 A17,17 0 0,1 51.78,37.15 M54.00,37.00 A17,17 0 0,1 56.22,37.15 M58.40,37.58 A17,17 0 0,1 60.51,38.29 M62.50,39.28 A17,17 0 0,1 64.35,40.51 M66.02,41.98 A17,17 0 0,1 67.49,43.65 M68.72,45.50 A17,17 0 0,1 69.71,47.49 M70.42,49.60 A17,17 0 0,1 70.85,51.78" android:strokeColor="#F4EEDC" android:strokeWidth="0.9" android:fillColor="#00000000"/>
+    <path android:pathData="M54.00,45.00 L60.00,54.00 L54.00,63.00 L48.00,54.00 Z" android:fillColor="#CFFFF5"/>
 </vector>
