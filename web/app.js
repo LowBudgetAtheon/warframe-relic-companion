@@ -281,6 +281,7 @@ function cardHTML(it) {
   if (open) h += `</ul></details></li>`;
   h += `</ul>`;
   if (it.note) h += `<div class="note">${esc(it.note)}</div>`;
+  if (it.get) h += `<div class="note"><b>How to get:</b> ${esc(it.get)}</div>`;
   h += `<div class="more${expanded.has(it.id) ? "" : " hidden"}">${expanded.has(it.id) ? moreHTML(it) : ""}</div>`;
   h += `<div class="cfoot"><button class="builtbtn" data-mastered="${it.id}">${isM ? "Mastered ✓" : "Mastered"}</button><button class="expbtn" data-exp="${it.id}">${expanded.has(it.id) ? "Hide info ▴" : "Relics & info ▾"}</button></div></article>`;
   return h;
@@ -338,7 +339,7 @@ function moreHTML(it) {
     const rsShown = sh.resurgence ? rs : [];
     const vaShown = sh.vaulted ? (sh.resurgence ? va : rs.concat(va)) : [];
     h += `<div class="part"><b>${esc(p.full)}</b>${p.n === 0 ? `<span class="need">collected</span>` : p.n > 1 ? `<span class="need">need ${p.n}</span>` : ""}`;
-    if (!rows.length) h += `<div class="relrow"><span class="farm">No relic data for this part yet.</span></div>`;
+    if (!rows.length) h += `<div class="relrow"><span class="farm">${it.src === "other" ? "Doesn't come from relics. See How to get above." : "No relic data for this part yet."}</span></div>`;
     av.forEach(([r, rar]) => { h += relRow(r, rar); });
     const rsRows = rsShown.map(([r, rar]) => relRow(r, rar, "rs")).join("");
     const vaRows = vaShown.map(([r, rar]) => relRow(r, rar, relicStatus(r) === "rs" ? "va" : relicStatus(r))).join("");
@@ -501,7 +502,7 @@ function favSummary() {
 }
 function tradeMessages() {
   const m = new Map();
-  starred().filter(active).forEach(it => missing(it).forEach(p => m.set(p.full, (m.get(p.full) || 0) + p.n)));
+  starred().filter(it => active(it) && it.src !== "other").forEach(it => missing(it).forEach(p => m.set(p.full, (m.get(p.full) || 0) + p.n)));
   const tokens = [...m.entries()].map(([n, c]) => c > 1 ? `[${n}] x${c}` : `[${n}]`);
   const msgs = []; let cur = [];
   const wrap = list => `WTB ${list.join(" ")} PMO`;

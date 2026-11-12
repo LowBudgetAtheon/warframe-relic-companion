@@ -176,6 +176,67 @@ async function wikiIncarnons() {
   return names;
 }
 
+/* ---------- WARFRAME Wiki: how to get a Prime that isn't from relics ---------- */
+const acqWhy = {};
+function htmlPlain(h) {
+  return h.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<\/t[dh]>/gi, " · ").replace(/<\/tr>/gi, " | ")
+    .replace(/<span class="mw-editsection[\s\S]*?<\/span>\s*<\/span>/gi, "")
+    .replace(/<h\d[\s\S]*?<\/h\d>/gi, " ")
+    .replace(/<sup[^>]*class="reference[\s\S]*?<\/sup>/gi, "")
+    .replace(/<br\s*\/?>|<\/p>|<\/li>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/&#0?39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/\[edit[^\]]*\]/gi, "").replace(/\s+/g, " ").trim();
+}
+async function wikiAcquisition(name) {
+  const page = encodeURIComponent(name.replace(/ /g, "_"));
+  const base = `${WIKI_API}?action=parse&page=${page}&format=json&formatversion=2&redirects=1`;
+  try {
+    const sj = await get(`${base}&prop=sections`);
+    if (sj.error) { acqWhy[name] = `api error ${sj.error.code}`; return null; }
+    const secs = (sj.parse && sj.parse.sections) || [];
+    const sec = secs.find(x => /^acquisition$/i.test(strip(String(x.line || "")))) || secs.find(x => strip(String(x.line || "")).toLowerCase() === name.toLowerCase());
+    if (!sec) { acqWhy[name] = `no Acquisition section (sections: ${((sj.parse && sj.parse.sections) || []).map(x => x.line).join("/").slice(0, 120)})`; return null; }
+    const clean0 = h => htmlPlain(h).replace(/^Acquisition\s*/i, "").replace(/(\s*[·|]\s*)+/g, m => m.includes("|") ? ". " : ", ").replace(/^[,. ]+/, "");
+    const clean = h => { const i = h.search(/<table/i); const pre = i > 0 ? clean0(h.slice(0, i)) : ""; return pre.length >= 40 ? pre : clean0(h); };
+    let html = "", plain = "";
+    if (/^\d+$/.test(String(sec.index))) {
+      const tj = await get(`${base}&prop=text&section=${sec.index}&disablelimitreport=1&disableeditsection=1`);
+      html = (tj.parse && tj.parse.text) || ""; plain = clean(html);
+    }
+    if (plain.length < 20) {
+      // Template-made sections can't be rendered alone: cut the section out of the full page
+      const fj = await get(`${base}&prop=text&disablelimitreport=1&disableeditsection=1`);
+      const full = (fj.parse && fj.parse.text) || "";
+      const anchor = sec.anchor || String(sec.line).replace(/ /g, "_");
+      const at = full.search(new RegExp(`id="${anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+      if (at >= 0) {
+        const after = full.slice(at);
+        const stop = after.slice(10).search(new RegExp(`<h${sec.level || 2}[\\s>]`, "i"));
+        html = stop >= 0 ? after.slice(0, stop + 10) : after.slice(0, 20000);
+        plain = clean(html.replace(/^[^>]*>/, "").replace(/^[\s\S]*?<\/h\d>/i, ""));
+      }
+    }
+    if (plain.length < 20) { acqWhy[name] = `section text too short (index ${sec.index}); html starts: ${html.replace(/\s+/g, " ").slice(0, 400)}`; return null; }
+    const sentences = plain.match(/[^.!?]+[.!?]+(\s|$)/g) || [plain];
+    let out = "";
+    for (const x of sentences) { if ((out + x).length > 260 && out) break; out += x; }
+    return out.trim();
+  } catch (e) { acqWhy[name] = e.message; return null; }
+}
+function labelFromId(itemName, seg) {
+  const compact = itemName.replace(/[^A-Za-z0-9]/g, "");
+  let rest = seg.toLowerCase().startsWith(compact.toLowerCase()) ? seg.slice(compact.length) : null;
+  if (rest == null) {
+    if (/Blueprint$/.test(seg)) return "Blueprint";
+    rest = seg.replace(/Prime/g, "");
+  }
+  rest = rest.replace(/Component$/, "").replace(/Helmet/, "Neuroptics");
+  const words = rest.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+  return words || "Blueprint";
+}
+
 /* ---------- build ---------- */
 async function build() {
   const overrides = await readJSON(OVERRIDES, {});
@@ -244,11 +305,11 @@ async function build() {
   const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, "");
   const ALIAS = [[/helmet/g, "neuroptics"], [/component$/, ""], [/blueprint$/, ""]];
   const key = t => ALIAS.reduce((v, [re, to]) => v.replace(re, to), norm(t));
-  let unmatched = 0, guessed = 0; const unmatchedIds = [], guessedNames = [];
+  let unmatched = 0, guessed = 0; const unmatchedIds = [], guessedNames = [], otherPrimes = [];
 
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
-    const req = new Map(), counts = new Map(), order = [];
+    const req = new Map(), counts = new Map(), order = [], otherIds = [];
     const mine = ownParts[x.name] || [];
     const byKey = Object.fromEntries(mine.map(nm => [key(nm), nm]));
     // second chance: drop the item's own words and compare what's left ("PrimeDualKamasBlade" -> "blade")
@@ -265,7 +326,10 @@ async function build() {
       if (!full) full = byKey[key(un.split("/").pop() || "")] || null;
       if (!full && c.name) full = byKey[key(`${x.name} ${c.name}`)] || null;
       if (!full) { const rk = resid(un.split("/").pop() || ""); if (rk) full = byResid[rk] || null; }
-      if (!full) { if (/Recipes\//.test(un)) { unmatched++; unmatchedIds.push(`${x.name}: ${un.split("/").pop()}`); } continue; } // resources like Orokin Cells
+      if (!full) {
+        if (/Recipes\//.test(un)) { unmatched++; unmatchedIds.push(`${x.name}: ${un.split("/").pop()}`); otherIds.push([un.split("/").pop(), c.itemCount || 1]); }
+        continue; // resources like Orokin Cells
+      }
       if (!counts.has(full)) order.push(full);
       counts.set(full, (counts.get(full) || 0) + (c.itemCount || 1));
     }
@@ -276,7 +340,16 @@ async function build() {
       r: rewardRelics[full].slice().sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })),
     }));
     const reqList = [...req.entries()].map(([n, c]) => ({ n, c }));
-    if (!parts.length) continue; // e.g. Founders items with no relics
+    let viaOther = false;
+    if (!parts.length) {
+      // Not from relics (e.g. Perita Rebellion Primes). Founders items stay out.
+      if (!otherIds.length || (overrides.exclude || []).includes(x.name)) continue;
+      const seenLbl = new Map();
+      for (const [seg, n] of otherIds) { const l = labelFromId(x.name, seg); seenLbl.set(l, (seenLbl.get(l) || 0) + n); }
+      [...seenLbl.entries()].sort((a, b) => (a[0] === "Blueprint" ? -1 : 0) - (b[0] === "Blueprint" ? -1 : 0))
+        .forEach(([l, n]) => parts.push({ p: l, full: l === "Blueprint" ? `${x.name} Blueprint` : `${x.name} ${l}`, c: n, r: [] }));
+      viaOther = true;
+    }
     const base = x.name.replace(/ Prime$/, "");
     const it = { id: slug(x.name), n: x.name, cat, slot };
     if (x.vaulted != null) it.vaulted = !!x.vaulted;
@@ -298,6 +371,11 @@ async function build() {
     const um = uniqueMods(mods, base, x.name);
     if (um.length) it.mods = um;
     if (x.wikiaUrl) it.wiki = wikiUrl(x.wikiaUrl);
+    if (viaOther) {
+      it.src = "other";
+      it.get = await wikiAcquisition(x.name) || "Doesn't come from relics. See the wiki for how to get it.";
+      otherPrimes.push(`${x.name}: ${it.get}`);
+    }
     const ov = (overrides.items || {})[x.name];
     if (ov) Object.assign(it, ov);
     items.push(it);
@@ -336,6 +414,8 @@ async function build() {
 
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
   note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics; ${unmatched} part IDs unmatched, ${guessed} parts with a guessed count of 1`);
+  if (otherPrimes.length) note(`Non-relic Primes (${otherPrimes.length}): ${otherPrimes.join(" || ").slice(0, 3500)}`);
+  if (Object.keys(acqWhy).length) warn(`Wiki how-to-get lookup failed: ${Object.entries(acqWhy).map(([k, v]) => `${k}: ${v}`).join(" || ").slice(0, 1500)}`);
   if (unmatchedIds.length) warn(`Unmatched part IDs: ${unmatchedIds.join("; ")}`);
   if (guessedNames.length) warn(`Guessed count of 1: ${guessedNames.join("; ")}`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
