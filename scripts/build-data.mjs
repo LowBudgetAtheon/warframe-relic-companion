@@ -244,7 +244,7 @@ async function build() {
   const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, "");
   const ALIAS = [[/helmet/g, "neuroptics"], [/component$/, ""], [/blueprint$/, ""]];
   const key = t => ALIAS.reduce((v, [re, to]) => v.replace(re, to), norm(t));
-  let unmatched = 0, guessed = 0;
+  let unmatched = 0, guessed = 0; const unmatchedIds = [], guessedNames = [];
 
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
@@ -265,11 +265,11 @@ async function build() {
       if (!full) full = byKey[key(un.split("/").pop() || "")] || null;
       if (!full && c.name) full = byKey[key(`${x.name} ${c.name}`)] || null;
       if (!full) { const rk = resid(un.split("/").pop() || ""); if (rk) full = byResid[rk] || null; }
-      if (!full) { if (/Recipes\//.test(un)) unmatched++; continue; } // resources like Orokin Cells
+      if (!full) { if (/Recipes\//.test(un)) { unmatched++; unmatchedIds.push(`${x.name}: ${un.split("/").pop()}`); } continue; } // resources like Orokin Cells
       if (!counts.has(full)) order.push(full);
       counts.set(full, (counts.get(full) || 0) + (c.itemCount || 1));
     }
-    for (const nm of mine) if (!counts.has(nm)) { order.push(nm); counts.set(nm, 1); guessed++; }
+    for (const nm of mine) if (!counts.has(nm)) { order.push(nm); counts.set(nm, 1); guessed++; guessedNames.push(nm); }
     order.sort((a, b) => (/ Blueprint$/.test(a) && a === `${x.name} Blueprint` ? -1 : 0) - (/ Blueprint$/.test(b) && b === `${x.name} Blueprint` ? -1 : 0));
     const parts = order.map(full => ({
       p: full.slice(x.name.length + 1), full, c: counts.get(full),
@@ -336,6 +336,8 @@ async function build() {
 
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
   note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics; ${unmatched} part IDs unmatched, ${guessed} parts with a guessed count of 1`);
+  if (unmatchedIds.length) warn(`Unmatched part IDs: ${unmatchedIds.join("; ")}`);
+  if (guessedNames.length) warn(`Guessed count of 1: ${guessedNames.join("; ")}`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
 
   return {
