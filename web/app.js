@@ -40,7 +40,7 @@ const TIER_ORDER = { Lith: 0, Meso: 1, Neo: 2, Axi: 3, Requiem: 4, Omnia: 5 };
 const RAR = { C: "Common", U: "Uncommon", R: "Rare" };
 const RAR_ORDER = { R: 0, U: 1, C: 2 };
 const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
-const DEFAULT_SETTINGS = { theme: "orokin-dark", farm: "both", show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true } };
+const DEFAULT_SETTINGS = { theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true } };
 const native = window.WRC || null; // Android bridge, absent in a normal browser
 
 /* ---------- SMALL HELPERS ---------- */
@@ -85,7 +85,7 @@ function normaliseState(s) {
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
     hvMin: !!s.hvMin,
-    settings: { ...DEFAULT_SETTINGS, ...st, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
+    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
 let state = loadState();
@@ -412,11 +412,22 @@ function buildMain() {
     <section class="summary"><div class="sumrow"><span>Parts collected</span><b id="mainSum">0 / 0</b></div>
       <div class="sumsub" id="mainSub"></div><div class="bar"><i id="mainBar"></i></div>
       <input class="search" id="search" type="search" placeholder="Search Primes or parts" autocomplete="off">
+      <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By type</button><button class="chip" data-sort="az">A–Z</button></div>
       <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
       <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button><span class="toast" data-toast></span></div></section>
     <div id="mainList"></div>
     <footer>Relic data from the <a href="https://wiki.warframe.com/w/Void_Relic" target="_blank">WARFRAME Wiki</a>, DE's official drop tables and WFCD community data. Orokin Cells and credits aren't listed. To master an item you still have to level it to rank 30 after you build it.</footer>`;
   $("#catSel").addEventListener("change", e => { mainCat = e.target.value; renderMain(); $("#pg-main").scrollTop = 0; });
+  $("#sortCtl").addEventListener("click", e => {
+    const b = e.target.closest("[data-sort]"); if (!b) return;
+    S().mainSort = b.dataset.sort; save(); renderMain();
+  });
+  // weapon slot dropdowns remember whether they're open
+  $("#mainList").addEventListener("toggle", e => {
+    const d = e.target; if (!d.matches || !d.matches("details.secgrp") || mainQuery) return;
+    if (d.open) delete S().collapsed[d.dataset.slot]; else S().collapsed[d.dataset.slot] = 1;
+    save();
+  }, true);
   $("#search").addEventListener("input", e => { mainQuery = e.target.value.trim().toLowerCase(); renderMain(); });
   $("#showM").addEventListener("click", e => { showMastered = !showMastered; e.currentTarget.setAttribute("aria-pressed", showMastered); renderMain(); });
   $("#hideD").addEventListener("click", e => { hideDone = !hideDone; e.currentTarget.setAttribute("aria-pressed", hideDone); renderMain(); });
@@ -434,6 +445,7 @@ function mainItems() {
 function sectionsFor(items) {
   const secs = new Map();
   const key = it => {
+    if (mainCat === "all" && S().mainSort === "az") return null;
     if (mainCat === "all") return it.cat === "weapons" ? `Weapons · ${it.slot || "Other"}` : CAT_LABEL[it.cat] || "Other";
     if (it.cat === "weapons") return it.slot || "Other";
     return null;
@@ -454,9 +466,18 @@ function renderMain() {
   if (!ITEMS.length) h = `<p class="empty">Loading the Prime list…</p>`;
   else if (!items.length) h = `<p class="empty">${mainQuery ? "Nothing matches that search." : "Nothing left here. Everything's mastered!"}</p>`;
   else sectionsFor(items).forEach(([k, list]) => {
-    if (k) h += `<h2 class="sec">${esc(k)}</h2>`;
-    h += `<div class="grid">${list.map(cardHTML).join("")}</div>`;
+    const grid = `<div class="grid">${list.map(cardHTML).join("")}</div>`;
+    if (k && mainCat === "weapons") {
+      const open = mainQuery || !S().collapsed[k];
+      h += `<details class="secgrp" data-slot="${esc(k)}"${open ? " open" : ""}><summary><h2 class="sec">${esc(k)}</h2><span class="seccnt">${list.length}</span></summary>${grid}</details>`;
+    } else {
+      if (k) h += `<h2 class="sec">${esc(k)}</h2>`;
+      h += grid;
+    }
   });
+  const sc = $("#sortCtl");
+  sc.classList.toggle("hidden", mainCat !== "all");
+  sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
   $("#mainList").innerHTML = h;
   $("#mainList").querySelectorAll(".card").forEach(c => groupCounts(c, BYID[c.dataset.item]));
   mainSummary();

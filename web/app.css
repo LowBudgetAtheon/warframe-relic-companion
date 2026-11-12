@@ -247,6 +247,17 @@ table.stats .up{color:var(--teal)} table.stats .down{color:var(--muted)}
 .search:focus{border-color:var(--gold)}
 .search::placeholder{color:var(--muted)}
 
+/* main: sort toggle and collapsible weapon slots */
+.ctlk{font:600 12px Rajdhani,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);align-self:center;margin-right:2px}
+details.secgrp{margin-bottom:4px}
+details.secgrp > summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;min-height:44px;margin:12px 0 8px;-webkit-user-select:none;user-select:none}
+details.secgrp > summary::-webkit-details-marker{display:none}
+details.secgrp > summary .sec{margin:0}
+details.secgrp > summary .seccnt{font:600 12px Rajdhani,sans-serif;letter-spacing:.06em;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+details.secgrp > summary::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--gold);border-bottom:2px solid var(--gold);transform:rotate(45deg);transition:transform .15s;margin-right:6px}
+details.secgrp:not([open]) > summary::after{transform:rotate(-45deg)}
+details.secgrp:not([open]) > summary{border-bottom:1px solid var(--line);padding-bottom:8px}
+
 /* relic runs */
 .hvpanel{margin-top:6px}
 .hvhead{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
