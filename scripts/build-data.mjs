@@ -176,6 +176,47 @@ async function wikiIncarnons() {
   return names;
 }
 
+/* ---------- WARFRAME Wiki: how to get a Prime that isn't from relics ---------- */
+function wikiPlain(t) {
+  let s = t.replace(/<ref[^>]*\/>|<ref[\s\S]*?<\/ref>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+  for (let i = 0; i < 6; i++) s = s.replace(/\{\{([^{}]*)\}\}/g, (m, inner) => {
+    const parts = inner.split("|").map(x => x.trim()).filter(x => x && !x.includes("="));
+    return parts.length > 1 ? parts[parts.length - 1] : "";
+  });
+  s = s.replace(/^\{\|[\s\S]*?^\|\}/gm, "")
+    .replace(/\[\[(?:File|Image|Category):[^\]]*\]\]/gi, "")
+    .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, "$2").replace(/\[\[([^\]]*)\]\]/g, "$1")
+    .replace(/\[https?:[^\s\]]+\s*([^\]]*)\]/g, "$1")
+    .replace(/'{2,}/g, "").replace(/<[^>]+>/g, "").replace(/^[*#:;]+\s*/gm, "").replace(/__\w+__/g, "");
+  return s.replace(/\s+/g, " ").trim();
+}
+async function wikiAcquisition(name) {
+  try {
+    const page = encodeURIComponent(name.replace(/ /g, "_"));
+    const j = await get(`${WIKI_API}?action=parse&page=${page}&prop=wikitext&format=json&formatversion=2&redirects=1`);
+    const txt = (j.parse && j.parse.wikitext) || "";
+    const m = /^==\s*Acquisition\s*==\s*$([\s\S]*?)(?=^==[^=]|(?![\s\S]))/im.exec(txt);
+    if (!m) return null;
+    const plain = wikiPlain(m[1]);
+    if (!plain) return null;
+    const sentences = plain.match(/[^.!?]+[.!?]+/g) || [plain];
+    let out = "";
+    for (const x of sentences) { if ((out + x).length > 240 && out) break; out += x; }
+    return out.trim();
+  } catch (e) { return null; }
+}
+function labelFromId(itemName, seg) {
+  const compact = itemName.replace(/[^A-Za-z0-9]/g, "");
+  let rest = seg.toLowerCase().startsWith(compact.toLowerCase()) ? seg.slice(compact.length) : null;
+  if (rest == null) {
+    if (/Blueprint$/.test(seg)) return "Blueprint";
+    rest = seg.replace(/Prime/g, "");
+  }
+  rest = rest.replace(/Component$/, "").replace(/Helmet/, "Neuroptics");
+  const words = rest.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+  return words || "Blueprint";
+}
+
 /* ---------- build ---------- */
 async function build() {
   const overrides = await readJSON(OVERRIDES, {});
@@ -244,11 +285,11 @@ async function build() {
   const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, "");
   const ALIAS = [[/helmet/g, "neuroptics"], [/component$/, ""], [/blueprint$/, ""]];
   const key = t => ALIAS.reduce((v, [re, to]) => v.replace(re, to), norm(t));
-  let unmatched = 0, guessed = 0; const unmatchedIds = [], guessedNames = [];
+  let unmatched = 0, guessed = 0; const unmatchedIds = [], guessedNames = [], otherPrimes = [];
 
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
-    const req = new Map(), counts = new Map(), order = [];
+    const req = new Map(), counts = new Map(), order = [], otherIds = [];
     const mine = ownParts[x.name] || [];
     const byKey = Object.fromEntries(mine.map(nm => [key(nm), nm]));
     // second chance: drop the item's own words and compare what's left ("PrimeDualKamasBlade" -> "blade")
@@ -265,7 +306,10 @@ async function build() {
       if (!full) full = byKey[key(un.split("/").pop() || "")] || null;
       if (!full && c.name) full = byKey[key(`${x.name} ${c.name}`)] || null;
       if (!full) { const rk = resid(un.split("/").pop() || ""); if (rk) full = byResid[rk] || null; }
-      if (!full) { if (/Recipes\//.test(un)) { unmatched++; unmatchedIds.push(`${x.name}: ${un.split("/").pop()}`); } continue; } // resources like Orokin Cells
+      if (!full) {
+        if (/Recipes\//.test(un)) { unmatched++; unmatchedIds.push(`${x.name}: ${un.split("/").pop()}`); otherIds.push([un.split("/").pop(), c.itemCount || 1]); }
+        continue; // resources like Orokin Cells
+      }
       if (!counts.has(full)) order.push(full);
       counts.set(full, (counts.get(full) || 0) + (c.itemCount || 1));
     }
@@ -276,7 +320,16 @@ async function build() {
       r: rewardRelics[full].slice().sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })),
     }));
     const reqList = [...req.entries()].map(([n, c]) => ({ n, c }));
-    if (!parts.length) continue; // e.g. Founders items with no relics
+    let viaOther = false;
+    if (!parts.length) {
+      // Not from relics (e.g. Perita Rebellion Primes). Founders items stay out.
+      if (!otherIds.length || (overrides.exclude || []).includes(x.name)) continue;
+      const seenLbl = new Map();
+      for (const [seg, n] of otherIds) { const l = labelFromId(x.name, seg); seenLbl.set(l, (seenLbl.get(l) || 0) + n); }
+      [...seenLbl.entries()].sort((a, b) => (a[0] === "Blueprint" ? -1 : 0) - (b[0] === "Blueprint" ? -1 : 0))
+        .forEach(([l, n]) => parts.push({ p: l, full: l === "Blueprint" ? `${x.name} Blueprint` : `${x.name} ${l}`, c: n, r: [] }));
+      viaOther = true;
+    }
     const base = x.name.replace(/ Prime$/, "");
     const it = { id: slug(x.name), n: x.name, cat, slot };
     if (x.vaulted != null) it.vaulted = !!x.vaulted;
@@ -298,6 +351,11 @@ async function build() {
     const um = uniqueMods(mods, base, x.name);
     if (um.length) it.mods = um;
     if (x.wikiaUrl) it.wiki = wikiUrl(x.wikiaUrl);
+    if (viaOther) {
+      it.src = "other";
+      it.get = await wikiAcquisition(x.name) || "Doesn't come from relics. See the wiki for how to get it.";
+      otherPrimes.push(`${x.name}: ${it.get}`);
+    }
     const ov = (overrides.items || {})[x.name];
     if (ov) Object.assign(it, ov);
     items.push(it);
@@ -336,6 +394,7 @@ async function build() {
 
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
   note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics; ${unmatched} part IDs unmatched, ${guessed} parts with a guessed count of 1`);
+  if (otherPrimes.length) note(`Non-relic Primes (${otherPrimes.length}): ${otherPrimes.join(" || ").slice(0, 3500)}`);
   if (unmatchedIds.length) warn(`Unmatched part IDs: ${unmatchedIds.join("; ")}`);
   if (guessedNames.length) warn(`Guessed count of 1: ${guessedNames.join("; ")}`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
