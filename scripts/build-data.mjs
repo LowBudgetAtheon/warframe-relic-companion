@@ -177,33 +177,35 @@ async function wikiIncarnons() {
 }
 
 /* ---------- WARFRAME Wiki: how to get a Prime that isn't from relics ---------- */
-function wikiPlain(t) {
-  let s = t.replace(/<ref[^>]*\/>|<ref[\s\S]*?<\/ref>/g, "").replace(/<!--[\s\S]*?-->/g, "");
-  for (let i = 0; i < 6; i++) s = s.replace(/\{\{([^{}]*)\}\}/g, (m, inner) => {
-    const parts = inner.split("|").map(x => x.trim()).filter(x => x && !x.includes("="));
-    return parts.length > 1 ? parts[parts.length - 1] : "";
-  });
-  s = s.replace(/^\{\|[\s\S]*?^\|\}/gm, "")
-    .replace(/\[\[(?:File|Image|Category):[^\]]*\]\]/gi, "")
-    .replace(/\[\[([^\]|]*)\|([^\]]*)\]\]/g, "$2").replace(/\[\[([^\]]*)\]\]/g, "$1")
-    .replace(/\[https?:[^\s\]]+\s*([^\]]*)\]/g, "$1")
-    .replace(/'{2,}/g, "").replace(/<[^>]+>/g, "").replace(/^[*#:;]+\s*/gm, "").replace(/__\w+__/g, "");
-  return s.replace(/\s+/g, " ").trim();
+const acqWhy = {};
+function htmlPlain(h) {
+  return h.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<table[\s\S]*?<\/table>/gi, " ")
+    .replace(/<span class="mw-editsection[\s\S]*?<\/span>\s*<\/span>/gi, "")
+    .replace(/<h\d[\s\S]*?<\/h\d>/gi, " ")
+    .replace(/<sup[^>]*class="reference[\s\S]*?<\/sup>/gi, "")
+    .replace(/<br\s*\/?>|<\/p>|<\/li>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/&#0?39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/\[edit[^\]]*\]/gi, "").replace(/\s+/g, " ").trim();
 }
 async function wikiAcquisition(name) {
+  const page = encodeURIComponent(name.replace(/ /g, "_"));
+  const base = `${WIKI_API}?action=parse&page=${page}&format=json&formatversion=2&redirects=1`;
   try {
-    const page = encodeURIComponent(name.replace(/ /g, "_"));
-    const j = await get(`${WIKI_API}?action=parse&page=${page}&prop=wikitext&format=json&formatversion=2&redirects=1`);
-    const txt = (j.parse && j.parse.wikitext) || "";
-    const m = /^==\s*Acquisition\s*==\s*$([\s\S]*?)(?=^==[^=]|(?![\s\S]))/im.exec(txt);
-    if (!m) return null;
-    const plain = wikiPlain(m[1]);
-    if (!plain) return null;
-    const sentences = plain.match(/[^.!?]+[.!?]+/g) || [plain];
+    const sj = await get(`${base}&prop=sections`);
+    if (sj.error) { acqWhy[name] = `api error ${sj.error.code}`; return null; }
+    const sec = ((sj.parse && sj.parse.sections) || []).find(x => /^acquisition$/i.test(strip(String(x.line || ""))));
+    if (!sec) { acqWhy[name] = `no Acquisition section (sections: ${((sj.parse && sj.parse.sections) || []).map(x => x.line).join("/").slice(0, 120)})`; return null; }
+    const tj = await get(`${base}&prop=text&section=${sec.index}&disablelimitreport=1&disableeditsection=1`);
+    let plain = htmlPlain((tj.parse && tj.parse.text) || "");
+    plain = plain.replace(/^Acquisition\s*/i, "");
+    if (!plain) { acqWhy[name] = "Acquisition section is empty or only a table"; return null; }
+    const sentences = plain.match(/[^.!?]+[.!?]+(\s|$)/g) || [plain];
     let out = "";
-    for (const x of sentences) { if ((out + x).length > 240 && out) break; out += x; }
+    for (const x of sentences) { if ((out + x).length > 260 && out) break; out += x; }
     return out.trim();
-  } catch (e) { return null; }
+  } catch (e) { acqWhy[name] = e.message; return null; }
 }
 function labelFromId(itemName, seg) {
   const compact = itemName.replace(/[^A-Za-z0-9]/g, "");
@@ -395,6 +397,7 @@ async function build() {
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
   note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics; ${unmatched} part IDs unmatched, ${guessed} parts with a guessed count of 1`);
   if (otherPrimes.length) note(`Non-relic Primes (${otherPrimes.length}): ${otherPrimes.join(" || ").slice(0, 3500)}`);
+  if (Object.keys(acqWhy).length) warn(`Wiki how-to-get lookup failed: ${Object.entries(acqWhy).map(([k, v]) => `${k}: ${v}`).join(" || ").slice(0, 1500)}`);
   if (unmatchedIds.length) warn(`Unmatched part IDs: ${unmatchedIds.join("; ")}`);
   if (guessedNames.length) warn(`Guessed count of 1: ${guessedNames.join("; ")}`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
