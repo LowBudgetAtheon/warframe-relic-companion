@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unmastered Prime Weapons – Parts Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121921; --panel2:#17212b; --line:#24313d;
+    --text:#e6edf3; --muted:#8b9aa8; --gold:#d9b44a; --gold2:#f1d27a;
+    --teal:#4fd1c5; --done:#3b4a57;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#1a2633 0%,var(--bg) 60%);color:var(--text);
+    font:15px/1.45 Inter,system-ui,sans-serif;min-height:100vh}
+  .wrap{max-width:900px;margin:0 auto;padding:16px 14px 60px}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+  .tabs a{font:700 15px Rajdhani,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-decoration:none;
+    padding:10px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs a.on{color:var(--gold2);border-color:var(--gold)}
+  header h1{font:700 28px/1.1 Rajdhani,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:0 0 4px;color:var(--gold2)}
+  header p{margin:0;color:var(--muted);font-size:13.5px}
+  .summary{margin:16px 0 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .sumrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-family:Rajdhani,sans-serif}
+  .sumrow b{font-size:22px;color:var(--teal)}
+  .sumsub{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .bar{height:6px;background:#1e2a35;border-radius:99px;overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--gold));width:0;transition:width .25s}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:99px;padding:6px 12px;
+    font:600 13px Rajdhani,sans-serif;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+  .chip[aria-pressed="true"]{border-color:var(--gold);color:var(--gold2);background:#221d10}
+  .chip.ghost{background:transparent}
+  .toast{color:var(--teal);font-size:12.5px;align-self:center;min-height:1em}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .card.complete{border-color:#2f5f5a}
+  .card.complete .name{color:var(--teal)}
+  .card.built{opacity:.55}
+  .chead{padding:12px 14px 10px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#18222d,#121921)}
+  .name{font:700 19px/1.1 Rajdhani,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--gold2)}
+  .meta{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--muted)}
+  .tag{font:600 11px Rajdhani,sans-serif;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+  .cbar{height:3px;background:#1e2a35;margin-top:8px;border-radius:99px;overflow:hidden}
+  .cbar i{display:block;height:100%;background:var(--teal);width:0;transition:width .2s}
+  ul{list-style:none;margin:0;padding:6px 6px 8px}
+  li label{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;user-select:none}
+  li label:hover{background:var(--panel2)}
+  li input{appearance:none;width:20px;height:20px;flex:none;border:1.5px solid #4a5b6a;border-radius:5px;display:grid;place-items:center;margin:0;cursor:pointer}
+  li input:checked{background:var(--teal);border-color:var(--teal)}
+  li input:checked::after{content:"";width:5px;height:10px;border:solid #0b0f14;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
+  li input:checked + span{color:var(--done);text-decoration:line-through}
+  .sub{font-size:11.5px;color:var(--muted);margin-left:auto;white-space:nowrap}
+  .group{font:600 11.5px Rajdhani,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 8px 2px}
+  .note{margin:0 12px 12px;padding:8px 10px;font-size:12.5px;color:#c9d4de;background:#1a1610;border-left:3px solid var(--gold);border-radius:6px}
+  .builtbtn{margin:0 12px 12px;align-self:flex-start;background:none;border:1px dashed #3a4a58;color:var(--muted);border-radius:6px;
+    padding:4px 10px;font:600 12px Rajdhani,sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+  .card.built .builtbtn{border-style:solid;color:var(--teal);border-color:var(--teal)}
+  .hidden{display:none}
+  .sec{font:700 18px Rajdhani,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--gold2);margin:22px 0 4px}
+  .secsub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .hv .card{border-color:#5a4a1e;background:linear-gradient(180deg,#1a1710,#121921)}
+  .rlist{padding:8px 12px 12px;display:flex;flex-direction:column;gap:6px}
+  .rrow{display:flex;align-items:center;gap:8px;font-size:13.5px}
+  .rrow .pn{flex:1}
+  .rar{font:600 11px Rajdhani,sans-serif;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:1px 6px;white-space:nowrap}
+  .rar.C{background:#3a2a1a;color:#e0a96d}.rar.U{background:#2b3038;color:#d4dbe3}.rar.R{background:#3b3214;color:#f1d27a}
+  .st{font-size:11.5px}.st.av{color:var(--teal)}.st.ba{color:#c9a0ff}.st.va{color:var(--muted)}
+  .part{padding:8px 12px;border-top:1px solid var(--line)}
+  .part:first-of-type{border-top:none}
+  .part b{font-weight:600;font-size:13.5px}
+  .part .need{color:var(--muted);font-size:12px;margin-left:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .rchip{font-size:12px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:var(--panel2);white-space:nowrap}
+  .rchip i{font-style:normal;font-weight:600;margin-left:4px}
+  .rchip.C i{color:#e0a96d}.rchip.U i{color:#d4dbe3}.rchip.R i{color:#f1d27a}
+  .rchip.hot{border-color:var(--gold)}
+  .rchip.av{border-color:var(--teal)}
+  .empty{color:var(--muted);padding:20px 0}
+  footer{margin-top:22px;color:var(--muted);font-size:12px}
+  footer a{color:var(--teal)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="tabs">
+    <a href="#weapons" data-view="weapons">Weapons</a>
+    <a href="#relics" data-view="relics">Relics</a>
+    <a href="#frames" data-view="frames">Prime Warframes</a>
+  </nav>
+
+  <header>
+    <h1 id="title"></h1>
+    <p id="intro"></p>
+  </header>
+
+  <section class="summary">
+    <div class="sumrow"><span id="sumLabel">Parts collected</span><b id="sumText">0 / 0</b></div>
+    <div class="sumsub" id="sumSub"></div>
+    <div class="bar"><i id="sumBar"></i></div>
+    <div class="controls" id="filters"></div>
+    <div class="controls">
+      <button class="chip ghost" id="hideDone" aria-pressed="false">Hide complete</button>
+      <button class="chip ghost" id="copyBtn">Copy still-needed list</button>
+      <button class="chip ghost" id="resetBtn">Reset to inventory</button>
+      <span class="toast" id="toast"></span>
+    </div>
+  </section>
+
+  <div class="grid" id="grid"></div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+/* ---------- DATA ----------
+   parts: [partName, countNeeded, countAlreadyInInventory]
+   The third number is what your Nov 12 inventory video showed. */
+const WEAPONS = [
+  {n:"Steflos Prime", t:"Primary", parts:[["Blueprint",1,1],["Barrel",1],["Receiver",1,1],["Stock",1]]},
+  {n:"Tenora Prime",  t:"Primary", parts:[["Blueprint",1],["Barrel",1],["Receiver",1],["Stock",1]]},
+  {n:"Tiberon Prime", t:"Primary", parts:[["Blueprint",1],["Barrel",1],["Receiver",1],["Stock",1]]},
+  {n:"Akmagnus Prime", t:"Secondary",
+   groups:[
+     {g:"Akmagnus Prime", parts:[["Blueprint",1],["Link",1]]},
+     {g:"Magnus Prime ×2 (built)", parts:[["Magnus Prime Blueprint",2],["Magnus Prime Barrel",2],["Magnus Prime Receiver",2]]}
+   ],
+   note:"Needs two fully built Magnus Primes, and building it uses them up. If you still own a Magnus Prime, you only need one more set of Magnus parts."},
+  {n:"Akvasto Prime", t:"Secondary",
+   groups:[
+     {g:"Akvasto Prime", parts:[["Blueprint",1],["Link",1]]},
+     {g:"Vasto Prime ×2 (built)", parts:[["Vasto Prime Blueprint",2],["Vasto Prime Barrel",2],["Vasto Prime Receiver",2]]}
+   ],
+   note:"Needs two fully built Vasto Primes, and building it uses them up. You've already mastered Vasto Prime, so if you kept it you only need one more set. Vasto Prime can take an Incarnon upgrade, so you may want to build extras instead of giving yours up."},
+  {n:"Pyrana Prime", t:"Secondary", parts:[["Blueprint",1],["Barrel",1],["Receiver",1,1]]},
+  {n:"Destreza Prime", t:"Melee", parts:[["Blueprint",1],["Blade",1],["Handle",1]]},
+  {n:"Fragor Prime",   t:"Melee", parts:[["Blueprint",1],["Head",1],["Handle",1]]},
+  {n:"Guandao Prime",  t:"Melee", parts:[["Blueprint",1,1],["Blade",2],["Handle",1]]},
+  {n:"Gunsen Prime",   t:"Melee", parts:[["Blueprint",1,1],["Blade",2],["Handle",2]]},
+  {n:"Kronen Prime",   t:"Melee", parts:[["Blueprint",1],["Blade",2],["Handle",2]]},
+  {n:"Pangolin Prime", t:"Melee", parts:[["Blueprint",1],["Blade",1],["Handle",1]]},
+  {n:"Tekko Prime",    t:"Melee", parts:[["Blueprint",1],["Blade",2],["Gauntlet",2]]},
+  {n:"Tipedo Prime",   t:"Melee", parts:[["Blueprint",1],["Handle",1],["Ornament",2]]},
+  {n:"Volnus Prime",   t:"Melee", parts:[["Blueprint",1],["Head",1],["Handle",1]]},
+];
+
+/* Frames: [name, haveBlueprint, haveNeuroptics, haveChassis, haveSystems] from the inventory video */
+const F = [
+  ["Ash",1,0,1,0],["Atlas",0,0,0,0],["Banshee",1,0,1,1],["Baruuk",1,0,1,0],["Caliban",1,1,1,1],
+  ["Chroma",0,0,0,0],["Citrine",1,0,0,1],["Ember",1,1,0,0],["Equinox",0,1,0,0],["Frost",0,0,0,0],
+  ["Gara",0,0,0,0],["Garuda",0,0,0,0],["Gauss",0,0,0,1],["Grendel",0,1,0,0],["Gyre",1,1,1,1],
+  ["Harrow",0,0,0,0],["Hildryn",0,1,0,1],["Hydroid",0,0,1,0],["Inaros",0,0,1,0],["Ivara",0,1,0,0],
+  ["Khora",0,0,1,1],["Lavos",1,1,1,0],["Limbo",1,0,0,0],["Loki",0,0,0,0],["Mag",0,0,0,0],
+  ["Mesa",0,1,1,1],["Mirage",0,0,0,1],["Nekros",0,0,0,0],["Nezha",0,0,0,0],["Nidus",0,0,0,0],
+  ["Nova",0,0,0,0],["Nyx",0,0,0,0],["Oberon",1,0,0,0],["Octavia",0,0,0,0],["Protea",1,1,0,0],
+  ["Revenant",0,1,1,1],["Rhino",0,0,0,0],["Saryn",0,1,1,1],["Sevagoth",0,1,0,1],["Styanax",1,0,1,1],
+  ["Titania",1,1,1,0],["Trinity",0,0,0,0],["Valkyr",0,0,0,1],["Vauban",0,0,0,0],["Volt",1,1,1,1],
+  ["Voruna",1,1,1,1],["Wisp",0,1,0,0],["Wukong",0,0,0,0],["Xaku",0,1,1,1],["Yareli",1,0,1,1],["Zephyr",0,0,0,0],
+];
+const FRAMES = F.map(([n,b,ne,c,s])=>({n:n+" Prime", t:"Warframe", frame:true,
+  parts:[["Blueprint",1,b],["Neuroptics Blueprint",1,ne],["Chassis Blueprint",1,c],["Systems Blueprint",1,s]]}));
+
+/* Relic sources per part, from the WARFRAME Wiki (Nov 2026). C/U/R = Common/Uncommon/Rare */
+const RELIC_SRC = {
+  "Steflos Prime Blueprint":"Neo Y2 U","Steflos Prime Barrel":"Axi S21 R","Steflos Prime Receiver":"Lith A13 C","Steflos Prime Stock":"Meso D9 U",
+  "Tenora Prime Blueprint":"Axi I2 C,Axi K10 C,Lith O3 C,Meso A3 C,Meso P5 C,Neo B7 C,Neo N20 C",
+  "Tenora Prime Barrel":"Lith T5 R,Lith T9 R,Meso T5 R,Meso Z5 U,Neo T5 R,Neo T6 R",
+  "Tenora Prime Receiver":"Axi T8 R,Meso T4 R,Neo T4 R,Neo T8 R",
+  "Tenora Prime Stock":"Axi C7 U,Axi G7 U,Axi P5 U,Axi S12 U,Axi T6 U,Lith R2 U,Meso Z4 U",
+  "Tiberon Prime Blueprint":"Axi L2 U,Axi O2 U,Axi O4 U,Lith A3 U,Lith C8 C,Lith K3 U,Neo R2 U",
+  "Tiberon Prime Barrel":"Meso T1 R,Neo K3 U",
+  "Tiberon Prime Receiver":"Axi D1 C,Axi G5 C,Axi K3 C,Axi P2 C,Meso O2 C,Meso R1 C",
+  "Tiberon Prime Stock":"Lith T2 R,Lith T6 R,Meso T2 R,Meso T3 R",
+  "Akmagnus Prime Blueprint":"Axi M5 C","Akmagnus Prime Link":"Axi M5 U",
+  "Magnus Prime Blueprint":"Axi M5 C,Axi C7 C,Axi K10 C,Axi S14 C,Axi T10 C,Lith H8 C,Lith Z3 C,Meso B6 C,Meso S15 C,Neo N18 C",
+  "Magnus Prime Barrel":"Axi M5 R,Axi M2 R,Meso M5 R,Neo M4 R",
+  "Magnus Prime Receiver":"Axi M5 U,Axi T8 U,Neo C2 U,Neo C3 U,Neo G4 U,Neo N19 U,Neo N22 U,Neo T5 U",
+  "Akvasto Prime Blueprint":"Axi A5 R","Akvasto Prime Link":"Axi A5 U",
+  "Vasto Prime Blueprint":"Axi A5 U,Axi P5 U,Axi S15 U,Lith L4 U,Meso A6 U,Meso D5 U,Meso L2 U,Meso V8 U,Neo S3 U",
+  "Vasto Prime Barrel":"Axi A5 C,Axi M4 C,Axi P5 C,Axi S7 C,Axi V3 C,Lith A5 C,Lith K11 C,Lith M8 C,Lith T11 C,Neo D1 C,Neo N2 C",
+  "Vasto Prime Receiver":"Axi A5 C,Lith A1 C,Lith G11 C,Lith V9 C,Meso N16 C,Meso V2 C,Neo B8 C,Neo N12 C,Neo R5 C,Neo T8 C",
+  "Pyrana Prime Blueprint":"Axi P1 R,Axi P2 R,Axi P3 R,Lith P1 R,Lith P2 R,Lith P7 R,Meso P1 R,Meso P6 R",
+  "Pyrana Prime Barrel":"Axi A8 C,Axi C4 C,Lith L2 C,Lith L3 C,Meso E2 C,Meso N7 C,Neo A2 C,Neo A9 C,Neo V7 C",
+  "Pyrana Prime Receiver":"Axi C3 U,Axi D3 U,Axi K3 U,Lith D5 U,Neo C1 U,Neo G2 U,Neo Z2 U",
+  "Destreza Prime Blueprint":"Axi D3 U,Axi K4 U,Axi P2 U,Lith M4 U,Lith P7 U,Meso R2 U,Neo B5 U,Neo S9 U",
+  "Destreza Prime Blade":"Axi D1 R,Axi D2 R,Lith D5 R,Meso D2 R,Meso D3 R,Neo D4 R",
+  "Destreza Prime Handle":"Axi D2 C,Axi M4 C,Axi O3 C,Axi O4 C,Axi R2 C,Lith L1 C,Meso E2 C,Meso E3 C,Meso P6 C",
+  "Fragor Prime Blueprint":"Axi A7 U,Axi F1 R,Lith F1 R,Meso F1 R,Meso H1 U,Neo S8 U",
+  "Fragor Prime Handle":"Axi C2 U,Axi N4 U,Lith V1 R,Lith V8 U,Neo D6 U,Neo T1 U,Neo V6 U",
+  "Fragor Prime Head":"Axi A1 C,Axi B2 C,Axi H1 C,Lith V7 C,Meso V8 C,Neo H1 C",
+  "Guandao Prime Blueprint":"Lith K9 U,Lith P5 U,Meso B5 U,Meso I2 U,Meso P7 U,Meso Z5 U,Neo T4 U",
+  "Guandao Prime Blade":"Axi S10 C,Axi S9 C,Lith K7 C,Lith O3 C,Meso H2 C,Neo P2 C,Neo V10 C,Neo Z6 C",
+  "Guandao Prime Handle":"Lith G3 R,Lith G4 R,Lith G7 R,Meso G2 R,Meso G4 R",
+  "Gunsen Prime Blueprint":"Axi P9 C,Lith C11 C,Lith L6 C,Lith N16 C,Meso F5 C,Neo C4 C,Neo P6 C,Neo Z10 C",
+  "Gunsen Prime Blade":"Lith G10 R,Lith G13 R,Meso G10 R,Meso G5 R",
+  "Gunsen Prime Handle":"Axi S19 U,Axi T12 U,Meso P15 U,Meso W4 U,Neo B9 U,Neo K7 U,Neo T7 U",
+  "Kronen Prime Blueprint":"Axi H3 C,Axi L3 C,Meso N7 C,Neo A2 C,Neo C1 C,Neo L1 C,Neo Z4 C,Neo Z8 C",
+  "Kronen Prime Blade":"Axi K2 R,Axi K3 R,Axi K4 R,Axi K5 R,Lith K3 R,Meso K2 R,Neo K3 R",
+  "Kronen Prime Handle":"Axi G3 U,Axi L5 U,Lith T6 U,Meso A1 U,Meso B2 U,Meso D3 U,Neo B4 U,Neo S11 U",
+  "Pangolin Prime Blueprint":"Axi P4 R,Lith P5 R,Meso P3 R,Neo P1 R,Neo P3 R,Neo P5 R",
+  "Pangolin Prime Blade":"Axi A11 U,Axi A13 U,Axi C8 U,Axi G4 U,Axi T7 U,Lith N7 U,Lith S11 U,Neo S14 U",
+  "Pangolin Prime Handle":"Axi C6 C,Axi I1 C,Axi V11 C,Meso N10 C,Meso R3 C,Meso S11 C,Neo N13 C,Neo N17 C",
+  "Tekko Prime Blueprint":"Lith L2 U,Lith P5 U,Meso E4 U,Meso V8 U,Neo B7 U",
+  "Tekko Prime Blade":"Axi T6 R,Axi T7 R,Meso T6 R,Neo T2 R",
+  "Tekko Prime Gauntlet":"Axi C5 C,Axi G4 C,Axi W2 C,Lith A5 C,Lith T4 C,Meso N9 C,Meso T5 C,Meso W1 C",
+  "Tipedo Prime Blueprint":"Lith B7 C,Lith P2 C,Meso A2 C,Meso C5 C,Meso L1 C,Meso N10 C,Meso W1 C,Meso W2 C",
+  "Tipedo Prime Handle":"Axi T2 R,Axi T3 R,Axi T4 R,Axi T9 R",
+  "Tipedo Prime Ornament":"Axi A6 U,Axi C5 U,Axi G2 U,Lith N13 U,Neo N10 U,Neo Z6 U",
+  "Volnus Prime Blueprint":"Axi A14 C,Lith G5 C,Lith H6 C,Lith H7 C,Lith S11 C,Meso Z4 C,Neo D5 C,Neo P5 C",
+  "Volnus Prime Handle":"Axi V11 R,Meso V7 R,Neo V10 R",
+  "Volnus Prime Head":"Axi B5 U,Axi C7 U,Axi C8 U,Axi I1 U,Axi K9 U,Lith P6 U,Lith Z3 U,Meso B5 U",
+};
+const AVAILABLE = new Set(["Axi S21","Meso D9","Neo Y2","Lith A13"]);
+const BARO = new Set(["Axi M5","Axi A5"]);
+const RAR = {C:"Common",U:"Uncommon",R:"Rare"};
+const RAR_ORDER = {R:0,U:1,C:2};
+const statusOf = r => AVAILABLE.has(r)?"Available now":BARO.has(r)?"Baro Ki'Teer":"Vaulted";
+const relicsFor = key => (RELIC_SRC[key]||"").split(",").filter(Boolean).map(s=>{const p=s.trim().split(" ");return {relic:p[0]+" "+p[1],rar:p[2]};});
+
+const VIEWS = {
+  weapons:{
+    title:"Prime Parts Checklist",
+    intro:"The 15 Prime weapons in your Codex screenshot that aren't mastered yet. Parts that showed up in your inventory video are already ticked.",
+    data:WEAPONS, filters:[["all","All"],["Primary","Primary"],["Secondary","Secondary"],["Melee","Melee"]],
+    foot:'Part counts from the <a href="https://wiki.warframe.com/w/Duplicate_Prime_Parts_Required">WARFRAME Wiki</a> and <a href="https://overframe.gg">Overframe</a>, checked Nov 2026. Orokin Cells and credits aren\'t listed. To master a weapon you still have to level it to rank 30 after you build it.'
+  },
+  relics:{
+    title:"Relics for Missing Parts",
+    intro:"Every Void Relic that can drop a weapon part you still need, based on what's unticked on the Weapons tab. Tick a part there and it drops off this page. Warframe parts aren't counted.",
+    filters:[["all","All tiers"],["Lith","Lith"],["Meso","Meso"],["Neo","Neo"],["Axi","Axi"]],
+    foot:'Relic tables from the <a href="https://wiki.warframe.com/w/Void_Relic">WARFRAME Wiki</a>, Nov 2026. Drop chance per refinement: Common 25.33% Intact → 16.67% Radiant · Uncommon 11% → 20% · Rare 2% → 10%. Vaulted relics can be traded with other players, or bought from Varzia when that item is in Prime Resurgence. Baro relics only appear when Baro Ki\'Teer stocks them.'
+  },
+  frames:{
+    title:"Prime Warframe Sets",
+    intro:"Every Prime Warframe you can still get, up to Citrine Prime. Parts from your inventory video are ticked, and extra copies are ignored. A built frame doesn't show up in inventory, so tap “Already own it” on any frame you've built.",
+    data:FRAMES, filters:[["all","All"],["ready","Ready to build"],["started","Partly collected"],["none","Not started"]],
+    foot:'Excalibur Prime is left out because it was a Founders\' exclusive and can\'t be obtained. List current through <a href="https://wiki.warframe.com/w/Citrine_Prime">Citrine Prime</a> (Sept 2026).'
+  }
+};
+
+/* ---------- STATE ---------- */
+const KEY="wf-prime-checklist-v2";
+const slug=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+const groupsOf=w=>w.groups||[{g:null,parts:w.parts}];
+function itemsOf(w){
+  const out=[];
+  groupsOf(w).forEach(gr=>gr.parts.forEach(([p,c,h])=>{
+    for(let i=1;i<=c;i++) out.push({id:slug(w.n+"|"+(gr.g||"")+"|"+p+"|"+i),part:p,i,c,group:gr.g,seed:i<=(h||0)});
+  }));
+  return out;
+}
+function seedState(){
+  const s={ticks:{},built:{}};
+  [...WEAPONS,...FRAMES].forEach(w=>itemsOf(w).forEach(it=>{ if(it.seed) s.ticks[it.id]=1; }));
+  return s;
+}
+let state;
+try{ state=JSON.parse(localStorage.getItem(KEY)||"null"); }catch(e){ state=null; }
+if(!state||!state.ticks) state=seedState();
+const save=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(state)); }catch(e){} };
+
+/* ---------- RENDER ---------- */
+const grid=document.getElementById("grid");
+let view="weapons", filter="all", hideDone=false;
+const fullName=(w,it)=>it.part.includes("Prime")?it.part:`${w.n} ${it.part}`;
+const shortName=(w,it)=>w.frame?it.part.replace(" Blueprint","").replace(/^Blueprint$/,"Main Blueprint"):fullName(w,it);
+
+function neededParts(){
+  const m={};
+  WEAPONS.forEach(w=>itemsOf(w).forEach(it=>{
+    if(!state.ticks[it.id]){ const k=fullName(w,it); (m[k]=m[k]||{w:w.n,n:0}).n++; }
+  }));
+  return m;
+}
+function relicMap(){
+  const need=neededParts(), rm={};
+  Object.entries(need).forEach(([k,v])=>relicsFor(k).forEach(({relic,rar})=>{
+    (rm[relic]=rm[relic]||[]).push({key:k,rar,w:v.w,n:v.n});
+  }));
+  return {need,rm};
+}
+const tierOf=r=>r.split(" ")[0];
+const stCls=r=>AVAILABLE.has(r)?"av":BARO.has(r)?"ba":"va";
+
+function renderRelics(){
+  const {need,rm}=relicMap();
+  const tierOk=r=>filter==="all"||tierOf(r)===filter;
+  const hv=Object.entries(rm).filter(([r,l])=>l.length>1&&tierOk(r))
+    .sort((a,b)=>b[1].length-a[1].length || (AVAILABLE.has(b[0])-AVAILABLE.has(a[0])) || a[0].localeCompare(b[0],undefined,{numeric:true}));
+  const hvSet=new Set(Object.entries(rm).filter(([,l])=>l.length>1).map(([r])=>r));
+  let html=`<h2 class="sec">High value</h2><p class="secsub">Relics that each hold two or more different parts you still need.</p>`;
+  html+=hv.length?`<div class="grid hv">`+hv.map(([r,l])=>`<article class="card"><div class="chead"><div class="name">${r}</div>
+      <div class="meta"><span class="tag">${l.length} parts you need</span><span class="st ${stCls(r)}">${statusOf(r)}</span></div></div>
+      <div class="rlist">${l.sort((a,b)=>RAR_ORDER[a.rar]-RAR_ORDER[b.rar]).map(p=>`<div class="rrow"><span class="pn">${p.key}</span><span class="rar ${p.rar}">${RAR[p.rar]}</span></div>`).join("")}</div></article>`).join("")+`</div>`
+    : `<p class="empty">No relics in this tier hold more than one part you need.</p>`;
+  html+=`<h2 class="sec">By weapon</h2><p class="secsub">Every relic for each missing part. Gold outline = also in High value. Teal outline = drops right now.</p><div class="grid">`;
+  WEAPONS.forEach(w=>{
+    const keys=[...new Set(itemsOf(w).map(it=>fullName(w,it)))].filter(k=>need[k]);
+    if(!keys.length) return;
+    html+=`<article class="card"><div class="chead"><div class="name">${w.n}</div><div class="meta"><span class="tag">${w.t}</span><span>${keys.length} part${keys.length>1?"s":""} missing</span></div></div>`;
+    keys.forEach(k=>{
+      const rs=relicsFor(k).filter(x=>tierOk(x.relic)).sort((a,b)=>RAR_ORDER[b.rar]-RAR_ORDER[a.rar]||a.relic.localeCompare(b.relic,undefined,{numeric:true}));
+      html+=`<div class="part"><b>${k}</b>${need[k].n>1?`<span class="need">need ${need[k].n}</span>`:""}<div class="chips">`+
+        (rs.length?rs.map(x=>`<span class="rchip ${x.rar}${hvSet.has(x.relic)?" hot":""}${AVAILABLE.has(x.relic)?" av":""}">${x.relic}<i>${x.rar}</i></span>`).join(""):`<span class="secsub">None in this tier</span>`)+`</div></div>`;
+    });
+    html+=`</article>`;
+  });
+  html+=`</div>`;
+  grid.className=""; grid.innerHTML=html;
+  const total=Object.keys(rm).length;
+  document.getElementById("sumLabel").textContent="High-value relics";
+  document.getElementById("sumText").textContent=hvSet.size;
+  document.getElementById("sumSub").textContent=`${total} relics drop at least one part you need · ${Object.keys(need).length} different parts missing`;
+}
+
+function render(){
+  const V=VIEWS[view];
+  document.querySelectorAll(".tabs a").forEach(a=>a.classList.toggle("on",a.dataset.view===view));
+  document.getElementById("title").textContent=V.title;
+  document.getElementById("intro").textContent=V.intro;
+  document.getElementById("foot").innerHTML=V.foot;
+  document.getElementById("filters").innerHTML=V.filters.map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${k===filter}">${l}</button>`).join("");
+  const isR=view==="relics";
+  document.querySelector(".bar").classList.toggle("hidden",isR);
+  document.getElementById("hideDone").classList.toggle("hidden",isR);
+  document.getElementById("resetBtn").classList.toggle("hidden",isR);
+  document.getElementById("copyBtn").textContent=isR?"Copy high-value list":"Copy still-needed list";
+  if(isR){ renderRelics(); return; }
+  grid.className="grid";
+  grid.innerHTML="";
+  V.data.forEach(w=>{
+    const card=document.createElement("article");
+    card.className="card"; card.dataset.w=slug(w.n);
+    let html=`<div class="chead"><div class="name">${w.n}</div>
+      <div class="meta"><span class="tag">${w.t}</span><span class="cnt"></span></div>
+      <div class="cbar"><i></i></div></div><ul>`;
+    let last;
+    itemsOf(w).forEach(it=>{
+      if(it.group&&it.group!==last){ html+=`<li class="group">${it.group}</li>`; last=it.group; }
+      const sub=it.c>1?`<span class="sub">${it.i} of ${it.c}</span>`:"";
+      html+=`<li><label><input type="checkbox" data-id="${it.id}" ${state.ticks[it.id]?"checked":""}><span>${shortName(w,it)}</span>${sub}</label></li>`;
+    });
+    html+=`</ul>`;
+    if(w.note) html+=`<div class="note">${w.note}</div>`;
+    if(w.frame) html+=`<button class="builtbtn" data-built="${slug(w.n)}">Already own it</button>`;
+    card.innerHTML=html; grid.appendChild(card);
+  });
+  update();
+}
+
+function update(){
+  const V=VIEWS[view]; let tot=0,got=0,ready=0,built=0;
+  V.data.forEach(w=>{
+    const items=itemsOf(w),n=items.length,g=items.filter(i=>state.ticks[i.id]).length;
+    const isBuilt=!!state.built[slug(w.n)];
+    tot+=n; got+=g; if(isBuilt) built++; else if(g===n) ready++;
+    const card=grid.querySelector(`[data-w="${slug(w.n)}"]`);
+    card.classList.toggle("built",isBuilt);
+    card.classList.toggle("complete",g===n&&!isBuilt);
+    card.querySelector(".cnt").textContent=isBuilt?"Owned ✓":(g===n?"Ready to build ✓":`${g} / ${n} parts`);
+    card.querySelector(".cbar i").style.width=(isBuilt?100:100*g/n)+"%";
+    let show=true;
+    if(view==="frames"){
+      if(filter==="ready") show=g===n&&!isBuilt;
+      else if(filter==="started") show=g>0&&g<n&&!isBuilt;
+      else if(filter==="none") show=g===0&&!isBuilt;
+    } else if(filter!=="all") show=w.t===filter;
+    if(hideDone&&(g===n||isBuilt)) show=false;
+    card.classList.toggle("hidden",!show);
+  });
+  document.getElementById("sumLabel").textContent=view==="frames"?"Frame parts collected":"Parts collected";
+  document.getElementById("sumText").textContent=`${got} / ${tot}`;
+  document.getElementById("sumBar").style.width=(tot?100*got/tot:0)+"%";
+  document.getElementById("sumSub").textContent=view==="frames"
+    ? `${ready} set${ready===1?"":"s"} ready to build${built?` · ${built} marked as owned`:""}`
+    : `${ready} weapon${ready===1?"":"s"} ready to build`;
+}
+
+/* ---------- EVENTS ---------- */
+grid.addEventListener("change",e=>{
+  const id=e.target.dataset.id; if(!id) return;
+  if(e.target.checked) state.ticks[id]=1; else delete state.ticks[id];
+  save(); update();
+});
+grid.addEventListener("click",e=>{
+  const b=e.target.closest("[data-built]"); if(!b) return;
+  const k=b.dataset.built; if(state.built[k]) delete state.built[k]; else state.built[k]=1;
+  save(); update();
+});
+document.getElementById("filters").addEventListener("click",e=>{
+  const b=e.target.closest("[data-f]"); if(!b) return;
+  filter=b.dataset.f;
+  document.querySelectorAll("[data-f]").forEach(x=>x.setAttribute("aria-pressed",x===b));
+  if(view==="relics") renderRelics(); else update();
+});
+document.getElementById("hideDone").addEventListener("click",e=>{
+  hideDone=!hideDone; e.currentTarget.setAttribute("aria-pressed",hideDone); update();
+});
+const toast=document.getElementById("toast");
+function say(m){ toast.textContent=m; clearTimeout(say.t); say.t=setTimeout(()=>toast.textContent="",2500); }
+document.getElementById("copyBtn").addEventListener("click",async()=>{
+  if(view==="relics"){
+    const {rm}=relicMap();
+    const hv=Object.entries(rm).filter(([,l])=>l.length>1).sort((a,b)=>b[1].length-a[1].length);
+    const txt=hv.length?hv.map(([r,l])=>`${r} (${statusOf(r)}): ${l.map(p=>p.key).join(", ")}`).join("\n"):"No high-value relics left.";
+    try{ await navigator.clipboard.writeText(txt); say(`Copied ${hv.length} relics`); }catch(e){ say("Copy was blocked here"); }
+    return;
+  }
+  const lines=[];
+  VIEWS[view].data.forEach(w=>{
+    if(state.built[slug(w.n)]) return;
+    const need={};
+    itemsOf(w).forEach(it=>{ if(!state.ticks[it.id]){ const k=fullName(w,it); need[k]=(need[k]||0)+1; } });
+    Object.entries(need).forEach(([k,v])=>lines.push(v>1?`${k} x${v}`:k));
+  });
+  const txt=lines.length?lines.join("\n"):"Nothing left — everything's collected!";
+  try{ await navigator.clipboard.writeText(txt); say(`Copied ${lines.length} line${lines.length===1?"":"s"}`); }
+  catch(e){ say("Copy was blocked here"); }
+});
+let armed=false;
+document.getElementById("resetBtn").addEventListener("click",e=>{
+  const btn=e.currentTarget;
+  if(!armed){ armed=true; btn.textContent="Tap again to reset"; setTimeout(()=>{armed=false;btn.textContent="Reset to inventory";},3000); return; }
+  state=seedState(); save(); armed=false; btn.textContent="Reset to inventory"; render(); say("Back to what the video showed");
+});
+
+function route(){
+  const h=location.hash.replace("#","");
+  const v=VIEWS[h]?h:"weapons";
+  if(v!==view){ view=v; filter="all"; }
+  render();
+}
+window.addEventListener("hashchange",route);
+view=VIEWS[location.hash.replace("#","")]?location.hash.replace("#",""):"weapons";
+render();
+</script>
+</body>
+</html>
