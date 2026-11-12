@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
         else web.loadUrl(START);
     }
 
-    /** Lets a swipe from the middle of the left edge open the side menu instead of Android's back gesture. */
+    /** Lets a swipe from the middle of either edge open a side panel instead of Android's back gesture. */
     private void updateGestureExclusion() {
         if (Build.VERSION.SDK_INT < 29) return;
         float d = getResources().getDisplayMetrics().density;
@@ -123,7 +123,10 @@ public class MainActivity extends Activity {
         int band = (int) (200 * d);
         int w = (int) (20 * d);
         int top = Math.max(0, h / 2 - band / 2);
-        web.setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, top, w, top + band)));
+        int right = web.getWidth();
+        web.setSystemGestureExclusionRects(Arrays.asList(
+                new Rect(0, top, w, top + band),               // left edge: settings menu
+                new Rect(right - w, top, right, top + band)));  // right edge: checklist
     }
 
     @Override
