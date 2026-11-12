@@ -94,7 +94,7 @@ function normaliseState(s) {
   const st = s.settings || {};
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {},
+    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
@@ -826,7 +826,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked) });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -840,7 +840,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u) });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -936,7 +936,8 @@ function bindEvents() {
 
   $("#tabs").addEventListener("click", e => { const a = e.target.closest("[data-page]"); if (a) goPage(+a.dataset.page, true); });
   $("#menuBtn").addEventListener("click", () => setDrawer(true));
-  $("#scrim").addEventListener("click", () => setDrawer(false));
+  $("#scrim").addEventListener("click", () => { setDrawer(false); setWeekly(false); });
+  $("#weeklyBtn").addEventListener("click", () => setWeekly(true));
   $("#modalRoot").addEventListener("click", e => { if (e.target.id === "modal" || e.target.closest("[data-close]")) closeModal(); });
 
   const dr = $("#drawer");
@@ -964,7 +965,7 @@ function bindEvents() {
       let next;
       try { next = await readBackup($("#bkIn").value); } catch (err) { say(btn, "That code doesn't look right"); return; }
       if (!btn._armed) { btn._armed = 1; btn.textContent = "Tap again to replace this phone's progress"; setTimeout(() => { btn._armed = 0; btn.textContent = "Restore"; }, 4000); return; }
-      state = next; save(); decoFor = undefined; applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
+      state = next; save(); decoFor = undefined; renderWeekly(); applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
     }
   });
   dr.addEventListener("change", e => {
@@ -999,52 +1000,147 @@ function bindPages() {
   window.addEventListener("resize", () => { p.scrollLeft = page * p.clientWidth; });
 }
 
-/* ---------- DRAWER GESTURES ---------- */
-let drawerOpen = false;
+/* ---------- SIDE PANELS: settings (left) and checklist (right) ---------- */
+let drawerOpen = false, weeklyOpen = false;
 function setDrawer(open) {
   drawerOpen = open;
+  if (open && weeklyOpen) setWeekly(false);
   document.body.classList.toggle("drawer-open", open);
   $("#drawer").style.transform = ""; $("#scrim").style.opacity = "";
   if (!open) document.activeElement && document.activeElement.blur && document.activeElement.blur();
 }
+function setWeekly(open) {
+  weeklyOpen = open;
+  if (open && drawerOpen) setDrawer(false);
+  if (open) renderWeekly();
+  document.body.classList.toggle("weekly-open", open);
+  $("#weekly").style.transform = ""; $("#scrim").style.opacity = "";
+  if (!open) document.activeElement && document.activeElement.blur && document.activeElement.blur();
+}
 function bindDrawerGesture() {
-  const dr = $("#drawer"), sc = $("#scrim");
+  const dr = $("#drawer"), wk = $("#weekly"), sc = $("#scrim");
   let mode = null, x0 = 0, y0 = 0, w = 0, dx = 0;
   document.addEventListener("touchstart", e => {
     const t = e.touches[0]; if (!t || e.touches.length > 1) return;
-    x0 = t.clientX; y0 = t.clientY; dx = 0; w = dr.offsetWidth;
-    if (!drawerOpen && x0 <= EDGE_PX && !e.target.closest(".menubtn") && !$("#modal")) {
-      mode = "open"; document.body.classList.add("dragging"); e.preventDefault();
-    } else if (drawerOpen && (e.target.closest("#drawer") || e.target === sc)) mode = "close?";
-    else mode = null;
+    x0 = t.clientX; y0 = t.clientY; dx = 0; mode = null;
+    if ($("#modal")) return;
+    const none = !drawerOpen && !weeklyOpen;
+    if (none && x0 <= EDGE_PX && !e.target.closest(".menubtn")) { mode = "lopen"; w = dr.offsetWidth; }
+    else if (none && x0 >= innerWidth - EDGE_PX && !e.target.closest(".menubtn")) { mode = "ropen"; w = wk.offsetWidth; }
+    else if (drawerOpen && (e.target.closest("#drawer") || e.target === sc)) { mode = "lclose?"; w = dr.offsetWidth; }
+    else if (weeklyOpen && (e.target.closest("#weekly") || e.target === sc)) { mode = "rclose?"; w = wk.offsetWidth; }
+    if (mode === "lopen" || mode === "ropen") { document.body.classList.add("dragging"); e.preventDefault(); }
   }, { passive: false, capture: true });
   document.addEventListener("touchmove", e => {
     if (!mode) return;
     const t = e.touches[0]; dx = t.clientX - x0;
-    if (mode === "close?") {
+    if (mode.endsWith("?")) {
       if (Math.abs(t.clientY - y0) > Math.abs(dx) + 6) { mode = null; return; }
-      if (dx < -10) { mode = "close"; document.body.classList.add("dragging"); } else return;
+      if (mode === "lclose?" && dx < -10) mode = "lclose";
+      else if (mode === "rclose?" && dx > 10) mode = "rclose";
+      else return;
+      document.body.classList.add("dragging");
     }
     e.preventDefault();
-    const off = mode === "open" ? Math.min(0, dx - w) : Math.min(0, dx);
-    dr.style.transform = `translateX(${off}px)`;
-    sc.style.opacity = String(1 + off / w);
+    let el, off;
+    if (mode === "lopen") { el = dr; off = Math.min(0, dx - w); }
+    else if (mode === "lclose") { el = dr; off = Math.min(0, dx); }
+    else if (mode === "ropen") { el = wk; off = Math.max(0, w + dx); }
+    else { el = wk; off = Math.max(0, dx); }
+    el.style.transform = `translateX(${off}px)`;
+    sc.style.opacity = String(1 - Math.abs(off) / w);
     sc.style.pointerEvents = "auto";
   }, { passive: false, capture: true });
   const end = () => {
-    if (!mode || mode === "close?") { mode = null; return; }
+    if (!mode || mode.endsWith("?")) { mode = null; return; }
     document.body.classList.remove("dragging"); sc.style.pointerEvents = "";
-    if (mode === "open") setDrawer(dx > w * 0.3); else setDrawer(dx > -w * 0.3);
+    if (mode === "lopen") setDrawer(dx > w * 0.3);
+    else if (mode === "lclose") setDrawer(dx > -w * 0.3);
+    else if (mode === "ropen") setWeekly(-dx > w * 0.3);
+    else setWeekly(dx < w * 0.3);
     mode = null;
   };
   document.addEventListener("touchend", end, { capture: true });
   document.addEventListener("touchcancel", end, { capture: true });
 }
 
+/* ---------- CHECKLIST (right panel) ----------
+   Ticks are stored with the reset period they were made in, so they clear on their
+   own: daily at 00:00 UTC, weekly on Monday 00:00 UTC (Warframe's resets). */
+const CHECKLIST = {
+  daily: [["Activities", [["sortie", "Sortie"]]]],
+  weekly: [
+    ["Vendors", [["palladino", "Palladino (Iron Wake)"]]],
+    ["Activities", [["archon", "Archon Hunt"], ["descendia", "Descendia"], ["descendia-sp", "Descendia (Steel Path)"]]],
+  ],
+};
+const utcDay = d => d.toISOString().slice(0, 10);
+function periodKey(sec, now = new Date()) {
+  if (sec === "daily") return utcDay(now);
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); // back to Monday
+  return utcDay(d);
+}
+const wTicked = (sec, id) => state.weekly.t[`${sec}:${id}`] === periodKey(sec);
+function resetNote(sec) { // Warframe resets at 00:00 UTC; say when that is on this phone
+  const r = new Date(); r.setUTCHours(0, 0, 0, 0);
+  if (sec === "weekly") r.setUTCDate(r.getUTCDate() + ((8 - r.getUTCDay()) % 7 || 7)); // next Monday
+  const t = r.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return sec === "daily" ? `Resets every day at ${t}.` : `Resets every ${r.toLocaleDateString(undefined, { weekday: "long" })} at ${t}.`;
+}
+function renderWeekly() {
+  const row = (sec, id, label, custom) => `<li class="${custom ? "custom" : ""}"><label><input type="checkbox" data-w="${sec}:${id}"${wTicked(sec, id) ? " checked" : ""}>${custom
+    ? `<input class="wtext" data-wedit="${id}" value="${esc(label)}" placeholder="Type your own item" aria-label="Your item">` : `<span>${esc(label)}</span>`}</label>${custom ? `<button class="wdel" data-wdel="${id}" aria-label="Remove item">×</button>` : ""}</li>`;
+  const section = sec => {
+    const mine = state.weekly.c.filter(x => x.sec === sec);
+    const all = CHECKLIST[sec].flatMap(([, list]) => list).length + mine.length;
+    const done = CHECKLIST[sec].flatMap(([, list]) => list).filter(([id]) => wTicked(sec, id)).length + mine.filter(x => wTicked(sec, x.id)).length;
+    return `<section class="wsec"><div class="wsechead"><h3>${sec === "daily" ? "Daily" : "Weekly"}</h3><span class="wcount">${done} / ${all}</span></div>
+      <p class="secsub">${resetNote(sec)}</p>
+      ${CHECKLIST[sec].map(([g, list]) => `<div class="group">${g}</div><ul>${list.map(([id, l]) => row(sec, id, l)).join("")}</ul>`).join("")}
+      ${mine.length ? `<div class="group">Your items</div><ul>${mine.map(x => row(sec, x.id, x.text, true)).join("")}</ul>` : ""}
+      <button class="wadd" data-wadd="${sec}" aria-label="Add a ${sec} item">+</button></section>`;
+  };
+  $("#weekly").innerHTML = `<h2>Checklist</h2>${section("daily")}${section("weekly")}`;
+}
+function bindWeekly() {
+  const wk = $("#weekly");
+  wk.addEventListener("change", e => {
+    const k = e.target.dataset.w; if (!k) return;
+    const sec = k.split(":")[0];
+    if (e.target.checked) { state.weekly.t[k] = periodKey(sec); blinkBuddy(); } else delete state.weekly.t[k];
+    save(); renderWeekly();
+  });
+  wk.addEventListener("click", e => {
+    const add = e.target.closest("[data-wadd]");
+    if (add) {
+      const id = "c" + Date.now().toString(36);
+      state.weekly.c.push({ id, sec: add.dataset.wadd, text: "" }); save(); renderWeekly();
+      const inp = wk.querySelector(`[data-wedit="${id}"]`); if (inp) inp.focus();
+      return;
+    }
+    const del = e.target.closest("[data-wdel]");
+    if (del) { const id = del.dataset.wdel; state.weekly.c = state.weekly.c.filter(x => x.id !== id); Object.keys(state.weekly.t).forEach(k => { if (k.endsWith(":" + id)) delete state.weekly.t[k]; }); save(); renderWeekly(); return; }
+    if (e.target.matches(".wtext")) e.preventDefault(); // tapping the text edits it instead of ticking
+  });
+  wk.addEventListener("input", e => {
+    const id = e.target.dataset.wedit; if (!id) return;
+    const x = state.weekly.c.find(c => c.id === id); if (x) { x.text = e.target.value; save(); }
+  });
+  wk.addEventListener("focusout", e => {
+    const id = e.target.dataset && e.target.dataset.wedit; if (!id) return;
+    const x = state.weekly.c.find(c => c.id === id);
+    if (x && !x.text.trim()) { state.weekly.c = state.weekly.c.filter(c => c !== x); save(); setTimeout(renderWeekly, 0); }
+  });
+  wk.addEventListener("keydown", e => { if (e.target.matches(".wtext") && e.key === "Enter") e.target.blur(); });
+  setInterval(() => { if (weeklyOpen && !wk.contains(document.activeElement)) renderWeekly(); }, 60000);
+}
+
 /* Android back button: close things before leaving the app */
 window.wrcBack = function () {
   if ($("#modal")) { closeModal(); return true; }
   if (drawerOpen) { setDrawer(false); return true; }
+  if (weeklyOpen) { setWeekly(false); return true; }
   const home = +S().startPage || 0;
   if (page !== home) { goPage(home, true); return true; }
   return false;
@@ -1178,7 +1274,7 @@ applyTheme();
 trackTopbar();
 runIntro();
 buildMain(); buildFavs(); buildRuns(); renderDrawer();
-bindEvents(); bindPages(); bindDrawerGesture(); startHidden();
+bindEvents(); bindPages(); bindDrawerGesture(); bindWeekly(); startHidden();
 page = +S().startPage; if (!(page >= 0 && page <= 3)) page = PAGE_MAIN;
 requestAnimationFrame(() => goPage(page, false));
 loadCachedLive();
