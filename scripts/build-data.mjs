@@ -215,57 +215,73 @@ async function build() {
       raw.push({ x, cat, slot, isW });
     }
   }
-  {
-    const all = FILES.flatMap(([f]) => lists[f]);
-    const primes = all.filter(x => /(^| )Prime( |$)/.test(x.name || ""));
-    const sample = primes.find(x => x.name === "Boltor Prime") || primes[0];
-    note(`Diag: ${primes.length} Prime-named entries, ${primes.filter(x => Array.isArray(x.components)).length} with components, ${raw.length} kept for pass 1`);
-    if (sample) {
-      note(`Diag keys of ${sample.name}: ${Object.keys(sample).join(",")}`);
-      const c = Array.isArray(sample.components) ? sample.components : [];
-      note(`Diag components: ${JSON.stringify(c.map(k => ({ n: k.name, u: k.uniqueName, c: k.itemCount, d: (k.drops || []).slice(0, 2) }))).slice(0, 900)}`);
-    }
-    const ash = primes.find(x => x.name === "Ash Prime");
-    if (ash) note(`Diag Ash: ${JSON.stringify((ash.components || []).map(k => [k.uniqueName, k.itemCount, k.name]))}`);
-    const ak = primes.find(x => x.name === "Akvasto Prime");
-    if (ak) note(`Diag Akvasto: ${JSON.stringify((ak.components || []).map(k => [k.uniqueName, k.itemCount, k.name]))} vasto=${(primes.find(x => x.name === "Vasto Prime") || {}).uniqueName}`);
-    const rl = relicList.find(r => /^Axi A1/.test(r.name || "")) || relicList[0];
-    if (rl) note(`Diag relic: ${JSON.stringify(rl).slice(0, 900)}`);
-    note(`Diag relic names: ${relicList.slice(0, 6).map(r => r.name).join(" | ")}; vaulted count ${relicList.filter(r => r.vaulted).length}`);
-    const md = mods.find(m => m.compatName && /Ash|Boltor/i.test(m.compatName)) || mods[0];
-    if (md) note(`Diag mod: ${JSON.stringify({ name: md.name, compatName: md.compatName, isAugment: md.isAugment, drops: (md.drops || []).slice(0, 2), wikiaUrl: md.wikiaUrl })}`);
-    note(`Diag mods with compatName: ${mods.filter(m => m.compatName).length}, with drops: ${mods.filter(m => (m.drops || []).length).length}`);
-    note(`Diag Boltor vaulted=${sample && sample.vaulted} vaultDate=${sample && sample.vaultDate}; genesis in Misc: ${lists.Misc.filter(x => / Incarnon Genesis$/.test(x.name || "")).length}`);
-    const de = Object.keys(drops.relicItems).filter(n => /Boltor Prime|Ash Prime/.test(n));
-    note(`Diag DE names: ${de.join(" | ")}`);
-  }
   const primeNames = new Set(raw.map(r => r.x.name));
+  const primeByUnique = Object.fromEntries(raw.filter(r => r.x.uniqueName).map(r => [r.x.uniqueName, r.x.name]));
+
+  /* Relic contents: WFCD Relics.json (every relic, vaulted ones too), then DE's tables */
+  const rewardRelics = {}, rewardByUnique = {};
+  const addReward = (name, relic, rar) => {
+    const l = rewardRelics[name] || (rewardRelics[name] = []);
+    if (!l.some(x => x[0] === relic)) l.push([relic, rar]);
+  };
+  for (const r of relicList) {
+    const rn = relicName(r.name);
+    if (!rn || !/Intact$/.test(r.name || "")) continue;
+    for (const w of r.rewards || []) {
+      const nm = w.item && w.item.name; if (!nm) continue;
+      addReward(nm, rn, RARMAP[w.rarity] || rarOf({ chance: (w.chance || 0) / 100 }));
+      if (w.item.uniqueName) rewardByUnique[w.item.uniqueName] = nm;
+    }
+  }
+  for (const [nm, l] of Object.entries(drops.relicItems)) for (const [rn, rar] of l) addReward(nm, rn, rar);
+  // each reward name belongs to the Prime item with the longest matching name
+  const byLen = [...primeNames].sort((a, b) => b.length - a.length);
+  const ownParts = {};
+  for (const nm of Object.keys(rewardRelics)) {
+    const owner = byLen.find(n => nm.startsWith(n + " "));
+    if (owner) (ownParts[owner] = ownParts[owner] || []).push(nm);
+  }
+  const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const ALIAS = [[/helmet/g, "neuroptics"], [/component$/, ""], [/blueprint$/, ""]];
+  const key = t => ALIAS.reduce((v, [re, to]) => v.replace(re, to), norm(t));
+  let unmatched = 0, guessed = 0;
+
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
-    const parts = [], req = [];
+    const req = new Map(), counts = new Map(), order = [];
+    const mine = ownParts[x.name] || [];
+    const byKey = Object.fromEntries(mine.map(nm => [key(nm), nm]));
+    // second chance: drop the item's own words and compare what's left ("PrimeDualKamasBlade" -> "blade")
+    const words = x.name.split(/\s+/).map(norm);
+    const resid = t => { let v = norm(t); for (const w of words) v = v.replace(w, ""); return ALIAS.reduce((q, [re, to]) => q.replace(re, to), v); };
+    const byResid = Object.fromEntries(mine.map(nm => [resid(nm), nm]));
     for (const c of x.components) {
-      const cname = c.name || "";
-      const isWhole = primeNames.has(cname) && !/\/Recipes\//.test(c.uniqueName || "");
-      if (isWhole) { req.push({ n: cname, c: c.itemCount || 1 }); continue; }
-      const rel = new Map();
-      let full = null;
-      for (const d of c.drops || []) {
-        const r = relicName(d.location); if (!r) continue;
-        if (!rel.has(r)) rel.set(r, rarOf(d));
-        if (!full && d.type && d.type.startsWith(x.name)) full = d.type;
+      const un = c.uniqueName || "";
+      if (primeByUnique[un] && primeByUnique[un] !== x.name) {
+        const n = primeByUnique[un]; req.set(n, (req.get(n) || 0) + (c.itemCount || 1)); continue;
       }
-      if (!full) full = cname === "Blueprint" ? `${x.name} Blueprint` : `${x.name} ${cname}`;
-      for (const k of [full, `${x.name} ${cname}`, `${x.name} ${cname} Blueprint`]) for (const [r, rar] of drops.relicItems[k] || []) if (!rel.has(r)) rel.set(r, rar);
-      if (!rel.size) continue; // resources like Orokin Cells
-      const label = full.startsWith(x.name + " ") ? full.slice(x.name.length + 1) : cname;
-      parts.push({ p: label, full, c: c.itemCount || 1, r: [...rel.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })) });
+      if (c.name && primeNames.has(c.name) && c.name !== x.name) { req.set(c.name, (req.get(c.name) || 0) + (c.itemCount || 1)); continue; }
+      let full = rewardByUnique[un] && rewardByUnique[un].startsWith(x.name + " ") ? rewardByUnique[un] : null;
+      if (!full) full = byKey[key(un.split("/").pop() || "")] || null;
+      if (!full && c.name) full = byKey[key(`${x.name} ${c.name}`)] || null;
+      if (!full) { const rk = resid(un.split("/").pop() || ""); if (rk) full = byResid[rk] || null; }
+      if (!full) { if (/Recipes\//.test(un)) unmatched++; continue; } // resources like Orokin Cells
+      if (!counts.has(full)) order.push(full);
+      counts.set(full, (counts.get(full) || 0) + (c.itemCount || 1));
     }
+    for (const nm of mine) if (!counts.has(nm)) { order.push(nm); counts.set(nm, 1); guessed++; }
+    order.sort((a, b) => (/ Blueprint$/.test(a) && a === `${x.name} Blueprint` ? -1 : 0) - (/ Blueprint$/.test(b) && b === `${x.name} Blueprint` ? -1 : 0));
+    const parts = order.map(full => ({
+      p: full.slice(x.name.length + 1), full, c: counts.get(full),
+      r: rewardRelics[full].slice().sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })),
+    }));
+    const reqList = [...req.entries()].map(([n, c]) => ({ n, c }));
     if (!parts.length) continue; // e.g. Founders items with no relics
     const base = x.name.replace(/ Prime$/, "");
     const it = { id: slug(x.name), n: x.name, cat, slot };
     if (x.vaulted != null) it.vaulted = !!x.vaulted;
     it.parts = parts;
-    if (req.length) it.req = req;
+    if (reqList.length) it.req = reqList;
     if (isW) {
       it.w = 1;
       it.inc = incBase.has(base) ? { g: `${base} Incarnon Genesis`, src: "the Steel Path Circuit (Duviri)" } : null;
@@ -319,7 +335,7 @@ async function build() {
   } catch (e) { log("solNodes failed:", e.message); }
 
   const counts = { items: items.length, frames: items.filter(i => i.cat === "warframes").length, relics: Object.keys(relics).length };
-  note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics`);
+  note(`Built ${counts.items} items (${counts.frames} Warframes), ${counts.relics} relics; ${unmatched} part IDs unmatched, ${guessed} parts with a guessed count of 1`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
 
   return {
