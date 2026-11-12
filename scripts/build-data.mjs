@@ -215,6 +215,19 @@ async function build() {
       raw.push({ x, cat, slot, isW });
     }
   }
+  {
+    const all = FILES.flatMap(([f]) => lists[f]);
+    const primes = all.filter(x => /(^| )Prime( |$)/.test(x.name || ""));
+    const sample = primes.find(x => x.name === "Boltor Prime") || primes[0];
+    note(`Diag: ${primes.length} Prime-named entries, ${primes.filter(x => Array.isArray(x.components)).length} with components, ${raw.length} kept for pass 1`);
+    if (sample) {
+      note(`Diag keys of ${sample.name}: ${Object.keys(sample).join(",")}`);
+      const c = Array.isArray(sample.components) ? sample.components : [];
+      note(`Diag components: ${JSON.stringify(c.map(k => ({ n: k.name, u: k.uniqueName, c: k.itemCount, d: (k.drops || []).slice(0, 2) }))).slice(0, 900)}`);
+    }
+    const de = Object.keys(drops.relicItems).filter(n => /Boltor Prime|Ash Prime/.test(n));
+    note(`Diag DE names: ${de.join(" | ")}`);
+  }
   const primeNames = new Set(raw.map(r => r.x.name));
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
