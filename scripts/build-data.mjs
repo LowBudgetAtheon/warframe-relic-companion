@@ -180,7 +180,7 @@ async function wikiIncarnons() {
 const acqWhy = {};
 function htmlPlain(h) {
   return h.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<table[\s\S]*?<\/table>/gi, " ")
+    .replace(/<\/t[dh]>/gi, " · ").replace(/<\/tr>/gi, " | ")
     .replace(/<span class="mw-editsection[\s\S]*?<\/span>\s*<\/span>/gi, "")
     .replace(/<h\d[\s\S]*?<\/h\d>/gi, " ")
     .replace(/<sup[^>]*class="reference[\s\S]*?<\/sup>/gi, "")
@@ -195,12 +195,13 @@ async function wikiAcquisition(name) {
   try {
     const sj = await get(`${base}&prop=sections`);
     if (sj.error) { acqWhy[name] = `api error ${sj.error.code}`; return null; }
-    const sec = ((sj.parse && sj.parse.sections) || []).find(x => /^acquisition$/i.test(strip(String(x.line || ""))));
+    const secs = (sj.parse && sj.parse.sections) || [];
+    const sec = secs.find(x => /^acquisition$/i.test(strip(String(x.line || "")))) || secs.find(x => strip(String(x.line || "")).toLowerCase() === name.toLowerCase());
     if (!sec) { acqWhy[name] = `no Acquisition section (sections: ${((sj.parse && sj.parse.sections) || []).map(x => x.line).join("/").slice(0, 120)})`; return null; }
     const tj = await get(`${base}&prop=text&section=${sec.index}&disablelimitreport=1&disableeditsection=1`);
-    let plain = htmlPlain((tj.parse && tj.parse.text) || "");
-    plain = plain.replace(/^Acquisition\s*/i, "");
-    if (!plain) { acqWhy[name] = "Acquisition section is empty or only a table"; return null; }
+    const html = (tj.parse && tj.parse.text) || "";
+    let plain = htmlPlain(html).replace(/^(Acquisition|[^.]{0,40}Prime)\s*/i, "").replace(/(\s*[·|]\s*)+/g, m => m.includes("|") ? ". " : ", ").replace(/^[,. ]+/, "");
+    if (plain.length < 20) { acqWhy[name] = `section text too short; html starts: ${html.replace(/\s+/g, " ").slice(0, 400)}`; return null; }
     const sentences = plain.match(/[^.!?]+[.!?]+(\s|$)/g) || [plain];
     let out = "";
     for (const x of sentences) { if ((out + x).length > 260 && out) break; out += x; }
