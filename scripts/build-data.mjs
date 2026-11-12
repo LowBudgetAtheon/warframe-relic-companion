@@ -268,6 +268,7 @@ async function wikiCategories(name) {
 }
 function classify(cats) {
   const c = cats.join(" | ");
+  if (/Exalted/i.test(c)) return null; // ability weapons like Regulators Prime aren't built
   if (/Cosmetic|Syandana|Armor|Skin|Glyph|Sigil|Decoration|Ephemera|Accessor|Prime Access|Resurgence|Vault|Relic|Mod\b|Event|Quest|Character|Lore|Disambiguation/i.test(c) && !/Weapons|Warframes|Sentinels|Companions/i.test(c)) return null;
   if (/Arch-?Gun/i.test(c)) return ["archgun", "Arch-gun", true];
   if (/Arch-?Melee/i.test(c)) return ["archmelee", "Arch-melee", true];
