@@ -312,15 +312,18 @@ async function build() {
   for (const [f, , , isW] of FILES) if (isW) for (const x of lists[f]) if (x.name && !weaponsByName[x.name]) weaponsByName[x.name] = x;
 
   // pass 1: Prime items with relic-dropping parts
-  const seen = new Set(), raw = [];
+  const seen = new Set(), raw = [], notMasterable = [];
   for (const [f, cat, slot, isW] of FILES) {
     for (const x of lists[f]) {
       const name = x.name || "";
       if (seen.has(name) || !/(^| )Prime( |$)/.test(name) || !Array.isArray(x.components)) continue;
       seen.add(name);
+      if ((overrides.exclude || []).includes(name)) continue;
+      if (x.masterable === false) { notMasterable.push(name); continue; } // the app tracks mastery, so these don't belong
       raw.push({ x, cat, slot, isW });
     }
   }
+  if (notMasterable.length) note(`Left out as not masterable: ${notMasterable.join(", ").slice(0, 1500)}`);
   const primeNames = new Set(raw.map(r => r.x.name));
   const primeByUnique = Object.fromEntries(raw.filter(r => r.x.uniqueName).map(r => [r.x.uniqueName, r.x.name]));
 
@@ -430,7 +433,7 @@ async function build() {
     const wikiPrimes = await wikiPrimeList();
     if (!wikiPrimes.size) warn("Wiki Prime list came back empty; skipping the cross-check");
     const have = new Set(items.map(i => i.n)), added = [], skipped = [];
-    const todo = [...wikiPrimes].filter(n => !have.has(n) && !(overrides.exclude || []).includes(n)).sort().slice(0, 60);
+    const todo = [...wikiPrimes].filter(n => !have.has(n) && !notMasterable.includes(n) && !(overrides.exclude || []).includes(n)).sort().slice(0, 60);
     for (const n of todo) {
       const wc = await wikiCategories(n);
       const cl = wc && classify(wc.cats);
