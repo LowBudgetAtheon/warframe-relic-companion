@@ -94,7 +94,7 @@ function normaliseState(s) {
   const st = s.settings || {};
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {},
+    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {},
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
@@ -438,7 +438,10 @@ function buildMain() {
     if (d.open) delete S().collapsed[d.dataset.slot]; else S().collapsed[d.dataset.slot] = 1;
     save();
   }, true);
-  $("#search").addEventListener("input", e => { mainQuery = e.target.value.trim().toLowerCase(); renderMain(); });
+  $("#search").addEventListener("input", e => {
+    if (secretSearch(e.target.value)) { e.target.value = ""; e.target.blur(); mainQuery = ""; renderMain(); return; }
+    mainQuery = e.target.value.trim().toLowerCase(); renderMain();
+  });
   $("#showM").addEventListener("click", e => { showMastered = !showMastered; e.currentTarget.setAttribute("aria-pressed", showMastered); renderMain(); });
   $("#hideD").addEventListener("click", e => { hideDone = !hideDone; e.currentTarget.setAttribute("aria-pressed", hideDone); renderMain(); });
 }
@@ -684,7 +687,7 @@ function renderDrawer() {
   $("#drawer").innerHTML = `<h2>Settings</h2>
     <details class="dsec"><summary>Theme</summary><div class="dbody">
       ${sd ? `<div class="sdnote">${esc(sd.label)} theme is on today. Your theme comes back tomorrow.</div>` : ""}
-      <div class="themes">${THEMES.map(([k, l, sw]) => `<button class="themebtn" data-theme-set="${k}" aria-pressed="${st.theme === k}"><span class="sw">${sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>${l}</button>`).join("")}</div>
+      <div class="themes">${THEMES.map(([k, l, sw]) => `<button class="themebtn" data-theme-set="${k}" aria-pressed="${st.theme === k}"><span class="sw">${sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>${l}</button>`).join("")}${hiddenThemeRows()}</div>
     </div></details>
     <details class="dsec"><summary>Info shown</summary><div class="dbody">
       ${SHOW_SWITCHES.map(([k, l]) => sw(k, l)).join("")}
@@ -694,6 +697,7 @@ function renderDrawer() {
     <label class="tgl"><span>Reduce motion</span><input type="checkbox" data-disp="reduceMotion"${st.reduceMotion ? " checked" : ""}></label>
     <label class="tgl"><span>Compact cards</span><input type="checkbox" data-disp="compact"${st.compact ? " checked" : ""}></label>
     <div class="drow"><label for="tsize">Text size</label><input id="tsize" type="range" min="85" max="130" step="5" value="${st.textSize}"><output id="tsizeOut">${st.textSize}%</output></div>
+    ${soundRow()}
     <div class="drow"><label for="startSel">Start page</label><select id="startSel" class="dsel">${START_PAGES.map(([v, l]) => `<option value="${v}"${+st.startPage === v ? " selected" : ""}>${l}</option>`).join("")}</select></div>
     <h3>Best farm source</h3>
     <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
@@ -822,7 +826,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked) });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -836,7 +840,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u) });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -973,6 +977,7 @@ function bindEvents() {
     if (e.target.id !== "tsize") return;
     S().textSize = +e.target.value; $("#tsizeOut").textContent = e.target.value + "%"; save(); applyDisplay();
   });
+  bindSoundPicker(dr);
   dr.addEventListener("keydown", e => { if (e.target.id === "codeIn" && e.key === "Enter") $("#codeBtn").click(); });
 }
 function renderOpenCards() { expanded.forEach(id => refreshCards(id)); }
@@ -984,7 +989,7 @@ function goPage(i, smooth) {
   p.scrollTo({ left: i * p.clientWidth, behavior: smooth ? "smooth" : "auto" });
   setTab(i);
 }
-function setTab(i) { page = i; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", +a.dataset.page === i)); }
+function setTab(i) { page = i; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", +a.dataset.page === i)); checkBaro(); }
 function bindPages() {
   const p = $("#pages"); let raf = 0;
   p.addEventListener("scroll", () => {
@@ -1134,7 +1139,7 @@ async function loadLive() {
     LIVE = live; LIVE_AT = Date.now(); LIVE_OFFLINE = false;
     try { localStorage.setItem(KEY_LIVE, JSON.stringify({ at: LIVE_AT, l: LIVE })); } catch (e) {}
   } else LIVE_OFFLINE = !!LIVE;
-  refreshLiveSets(); renderRotating(); renderRuns(); renderUpdated(); renderOpenCards();
+  refreshLiveSets(); renderRotating(); renderRuns(); renderUpdated(); renderOpenCards(); checkBaro();
   ITEMS.forEach(it => { if (state.stars[it.id]) refreshCards(it.id); });
 }
 function loadCachedLive() {
@@ -1155,8 +1160,8 @@ function runIntro() {
   const el = $("#intro");
   const reduce = S().reduceMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   const done = () => { if (el.classList.contains("done")) return; el.classList.add("done"); setTimeout(() => el.remove(), 500); };
-  el.addEventListener("click", done);
-  setTimeout(done, reduce ? 400 : 1900);
+  const later = () => { if (Date.now() < (window.__introHold || 0)) setTimeout(later, 200); else done(); };
+  setTimeout(later, reduce ? 400 : 1900);
 }
 
 /* ---------- TOP BAR HEIGHT ---------- */
@@ -1173,7 +1178,7 @@ applyTheme();
 trackTopbar();
 runIntro();
 buildMain(); buildFavs(); buildRuns(); renderDrawer();
-bindEvents(); bindPages(); bindDrawerGesture();
+bindEvents(); bindPages(); bindDrawerGesture(); startHidden();
 page = +S().startPage; if (!(page >= 0 && page <= 3)) page = PAGE_MAIN;
 requestAnimationFrame(() => goPage(page, false));
 loadCachedLive();
