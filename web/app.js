@@ -95,7 +95,8 @@ function normaliseState(s) {
   const st = s.settings || {};
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] }, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
+    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
+    relicCounts: s.relicCounts || {}, building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
@@ -165,6 +166,19 @@ function allParts(it) {
 }
 const starred = () => ITEMS.filter(it => state.stars[it.id]);
 const active = it => !state.mastered[it.id];
+
+/* ---------- FOUNDRY BUILDS ----------
+   building[id] = {e: end time, n: name}; built[id] = claimed from the Foundry, waiting to be mastered. */
+const BUILD_H = { warframes: 72, archwing: 72 };
+const buildHours = it => it.bt || BUILD_H[it.cat] || 12;
+const isComplete = it => { const { n, g } = progress(it); return n > 0 && g === n; };
+const readyToBuild = it => active(it) && isComplete(it) && !state.building[it.id] && !state.built[it.id];
+function buildTag(it) {
+  const b = state.building[it.id]; if (!b) return "";
+  return `<span class="btag">Building <em>${b.e > Date.now() ? until(b.e) : "done"}</em></span>`;
+}
+function clearBuild(id) { delete state.building[id]; delete state.built[id]; }
+const ownRel = r => { const n = (state.relicCounts || {})[r]; return n ? `<span class="own" title="You have ${n}">×${n}</span>` : ""; };
 
 /* ---------- RELIC STATUS (data + live vendors) ---------- */
 const RELIC_RE = /^(Lith|Meso|Neo|Axi)\s+([A-Z]\d+)\b/;
@@ -277,8 +291,8 @@ function cardHTML(it) {
   const cls = `card${isM ? " built" : ""}${done && !isM ? " complete" : ""}${expanded.has(it.id) ? " open" : ""}`;
   let h = `<article class="${cls}" data-item="${it.id}"><div class="chead" data-exp="${it.id}">
     <div class="ctop"><div class="name">${esc(it.n)}</div>${vwHTML(it)}<button class="star${state.stars[it.id] ? " on" : ""}" data-star="${it.id}" aria-label="Star">${state.stars[it.id] ? "★" : "☆"}</button></div>
-    <div class="meta"><span class="tag">${esc(it.slot || CAT_LABEL[it.cat] || "Prime")}</span><span class="cnt">${cntText(it)}</span></div>
-    <div class="cbar"><i style="width:${isM ? 100 : n ? 100 * g / n : 0}%"></i></div></div><ul>`;
+    <div class="meta"><span class="tag">${esc(it.slot || CAT_LABEL[it.cat] || "Prime")}</span>${buildTag(it)}<span class="cnt">${cntText(it)}</span></div>
+    <div class="cbar"><i style="width:${isM ? 100 : n ? 100 * g / n : 0}%"></i></div></div>${rtbHTML(it)}<ul>`;
   let open = null;
   unitsOf(it).forEach(u => {
     if (u.group !== open) {
@@ -297,10 +311,12 @@ function cardHTML(it) {
   h += `<div class="cfoot"><button class="builtbtn" data-mastered="${it.id}">${isM ? "Mastered ✓" : "Mastered"}</button><button class="expbtn" data-exp="${it.id}">${expanded.has(it.id) ? "Hide info ▴" : "Relics & info ▾"}</button></div></article>`;
   return h;
 }
+const rtbHTML = it => readyToBuild(it) ? `<div class="rtb"><span>Ready to build</span><button class="chip" data-build="${it.id}">Building</button></div>` : "";
 function cntText(it) {
   const { n, g } = progress(it);
   if (state.mastered[it.id]) return "Mastered ✓";
-  if (n && g === n) return "Ready to build ✓";
+  if (state.building[it.id] || state.built[it.id]) return "All parts ✓";
+  if (n && g === n) return `${g} / ${n} parts ✓`;
   return `${g} / ${n} parts`;
 }
 function groupCounts(card, it) {
@@ -337,7 +353,7 @@ function relRow(r, rar, kind) {
     const fr = resurgenceFrames(r);
     tag = `<span class="rtag">Prime Resurgence</span>${fr.length ? `<span class="sub" style="margin-left:0">back with ${esc(fr.join(", "))}</span>` : ""}`;
   } else if (kind === "ba-off") tag = `<span class="vtag">Baro Ki'Teer only</span>`;
-  return `<div class="relrow"><span class="rn">${esc(r)}</span><span class="rar ${rar}">${RAR[rar] || rar}</span>${ch}${tag}${kind ? "" : farmHTML(r)}</div>`;
+  return `<div class="relrow"><span class="rn">${esc(r)}${ownRel(r)}</span><span class="rar ${rar}">${RAR[rar] || rar}</span>${ch}${tag}${kind ? "" : farmHTML(r)}</div>`;
 }
 function moreHTML(it) {
   const sh = S().show;
@@ -479,7 +495,11 @@ function renderMain() {
   let h = "";
   if (!ITEMS.length) h = `<p class="empty">Loading the Prime list…</p>`;
   else if (!items.length) h = `<p class="empty">${mainQuery ? "Nothing matches that search." : "Nothing left here. Everything's mastered!"}</p>`;
-  else sectionsFor(items).forEach(([k, list]) => {
+  else {
+    const ready = items.filter(readyToBuild);
+    if (ready.length) h += `<h2 class="sec rtbsec">Ready to build</h2><div class="grid">${ready.map(cardHTML).join("")}</div>`;
+    const rest = items.filter(it => !readyToBuild(it));
+    sectionsFor(rest).forEach(([k, list]) => {
     const grid = `<div class="grid">${list.map(cardHTML).join("")}</div>`;
     if (k && mainCat === "weapons") {
       const open = mainQuery || !S().collapsed[k];
@@ -488,7 +508,8 @@ function renderMain() {
       if (k) h += `<h2 class="sec">${esc(k)}</h2>`;
       h += grid;
     }
-  });
+    });
+  }
   const sc = $("#sortCtl");
   sc.classList.toggle("hidden", mainCat !== "all");
   sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
@@ -581,7 +602,7 @@ function renderRuns() {
     <p class="secsub">Relics that hold parts for two or more different starred items.</p>`;
   h += hv.length ? `<div class="grid hv">` + hv.map(([r, l]) => {
     const n = new Set(l.map(x => x.it)).size;
-    return `<article class="card"><div class="chead" style="cursor:default"><div class="name">${esc(r)}</div>
+    return `<article class="card"><div class="chead" style="cursor:default"><div class="name">${esc(r)}${ownRel(r)}</div>
       <div class="meta"><span class="tag">${n} starred items</span><span class="st ${stCls(r)}">${statusLabel(r)}</span></div></div>
       <div class="rlist">${l.sort((a, b) => RAR_ORDER[a.rar] - RAR_ORDER[b.rar]).map(p => `<div class="rrow"><span class="pn">${esc(p.full)}</span><span class="rar ${p.rar}">${RAR[p.rar]}</span></div>`).join("")}</div></article>`;
   }).join("") + `</div>` : `<p class="empty">${starItems.length < 2 ? "Star at least two items to find relics that cover more than one." : "No relic holds parts for more than one of your starred items."}</p>`;
@@ -603,7 +624,8 @@ function renderRuns() {
   else h += `<div class="fiss">${fiss.map(f => {
     const match = f.tier === "Omnia" ? Object.keys(needTiers).length > 0 : !!needTiers[f.tier];
     const cnt = f.tier === "Omnia" ? Object.values(needTiers).reduce((a, b) => a + b, 0) : needTiers[f.tier] || 0;
-    return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi">${esc(f.type)}${f.hard ? `<span class="flag sp">Steel Path</span>` : ""}${f.storm ? `<span class="flag">Void Storm</span>` : ""}${match ? `<span class="flag need">${cnt} relic${cnt === 1 ? "" : "s"}</span>` : ""}<small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span></div>`;
+    const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<span class="flag need">${cnt} relic${cnt === 1 ? "" : "s"}</span>` : "");
+    return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi"><span class="mt">${esc(f.type)}</span><small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span>${flags ? `<span class="flags">${flags}</span>` : ""}</div>`;
   }).join("")}</div>`;
 
   // Everything missing
@@ -620,7 +642,7 @@ function renderRuns() {
     ms.forEach(p => {
       const rs = p.r.filter(([r]) => tierOk(r)).sort((a, b) => RAR_ORDER[b[1]] - RAR_ORDER[a[1]] || relicSort(a[0], b[0]));
       c += `<div class="part"><b>${esc(p.full)}</b>${p.n > 1 ? `<span class="need">need ${p.n}</span>` : ""}<div class="chips">` +
-        rs.map(([r, rar]) => `<span class="rchip ${rar}${hvSet.has(r) ? " hot" : ""}${obtainable(r) ? " av" : ""}">${esc(r)}<i>${rar}</i></span>`).join("") + `</div></div>`;
+        rs.map(([r, rar]) => `<span class="rchip ${rar}${hvSet.has(r) ? " hot" : ""}${obtainable(r) ? " av" : ""}">${esc(r)}<i>${rar}</i>${ownRel(r)}</span>`).join("") + `</div></div>`;
     });
     cards.push((state.stars[it.id] ? "0" : "1") + it.n + "\u0000" + c + `</article>`);
   });
@@ -713,6 +735,10 @@ function renderDrawer() {
     <h3>Best farm source</h3>
     <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
     <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
+    <h3>Inventory Scan</h3>
+    <p class="dnote">Upload a screen recording to update your relics and Prime parts.</p>
+    ${[["relics", "Relics"], ["parts", "Prime parts"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
+    <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
     <div class="spacer"></div>
     <h3>Enter code</h3>
     <div class="codebox"><input id="codeIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code"><button class="chip" id="codeBtn">Unlock</button></div>
@@ -721,9 +747,68 @@ function renderDrawer() {
       <div class="controls"><button class="chip" id="bkCopy">Copy backup code</button></div>
       <textarea id="bkIn" placeholder="Paste a backup code here to restore" spellcheck="false"></textarea>
       <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><span class="toast" data-toast></span></div>
+      <div class="controls"><button class="chip danger" id="clearBtn">Clear data</button></div>
       <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
     <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
 }
+const SCAN_UI = { busy: false, msg: "", bad: false }; // shared with inventory.js
+function scanSay(msg, bad, busy) {
+  Object.assign(SCAN_UI, { msg, bad: !!bad, busy: !!busy });
+  const m = $("#scanMsg");
+  if (m) { m.className = "scanmsg" + (bad ? " bad" : ""); m.innerHTML = esc(msg) + (busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""); }
+  document.querySelectorAll("#drawer .filebox").forEach(f => { f.classList.toggle("off", !!busy); f.querySelector("input").disabled = !!busy; });
+}
+
+/* ---------- CLEAR DATA ---------- */
+const CLEAR_OPTS = [["parts", "Mastery & parts"], ["relics", "Relic counts"], ["favs", "Favourites"], ["check", "Checklist"], ["settings", "Settings"], ["secrets", "Unlocked secrets & codes"]];
+const WIPE_WORD = "WIPECLEAN";
+function showClear() {
+  const pick = new Set(); let step = 0;
+  const shell = (title, body, btns) => `<div class="modal" id="modal"><article class="card clearbox"><div class="chead" style="cursor:default"><div class="name">${title}</div></div>
+    <div class="mbody">${body}</div><div class="tourbtns">${btns}</div></article></div>`;
+  const draw = () => {
+    const names = CLEAR_OPTS.filter(([k]) => pick.has(k)).map(([, l]) => l);
+    if (step === 0) $("#modalRoot").innerHTML = shell("Clear data", `<p>Choose what to clear from this phone.</p>${CLEAR_OPTS.map(([k, l]) =>
+      `<label class="tgl"><span>${l}</span><input type="checkbox" data-clr="${k}"${pick.has(k) ? " checked" : ""}></label>`).join("")}`,
+      `<button class="chip ghost" data-close>Cancel</button><button class="chip" data-cnext${pick.size ? "" : " disabled"}>Next</button>`);
+    else if (step === 1) $("#modalRoot").innerHTML = shell("Are you sure?", `<p>This clears:</p><ul class="news">${names.map(n => `<li>${esc(n)}</li>`).join("")}</ul>
+      <p>It can't be undone. If you might want it back, copy a backup code first.</p>`,
+      `<button class="chip ghost" data-close>Cancel</button><button class="chip danger" data-cnext>Yes, clear it</button>`);
+    else $("#modalRoot").innerHTML = shell("Confirm", `<p>Type <b>${WIPE_WORD}</b> to clear your data.</p>
+      <div class="codebox"><input id="wipeIn" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Confirmation"></div>`,
+      `<button class="chip ghost" data-close>Cancel</button><button class="chip danger" id="wipeGo" disabled>Clear data</button>`);
+    const card = $("#modal .card");
+    card.addEventListener("change", e => {
+      const k = e.target.dataset.clr; if (!k) return;
+      if (e.target.checked) pick.add(k); else pick.delete(k);
+      card.querySelector("[data-cnext]").disabled = !pick.size;
+    });
+    card.addEventListener("input", e => { if (e.target.id === "wipeIn") $("#wipeGo").disabled = e.target.value !== WIPE_WORD; });
+    card.addEventListener("click", e => {
+      if (e.target.closest("[data-cnext]") && pick.size) { step++; draw(); if (step === 2) setTimeout(() => $("#wipeIn") && $("#wipeIn").focus(), 50); }
+      if (e.target.id === "wipeGo" && $("#wipeIn").value === WIPE_WORD) { clearData(pick); closeModal(); }
+    });
+  };
+  draw();
+}
+function clearData(pick) {
+  if (pick.has("parts")) { state.ticks = {}; state.mastered = {}; state.building = {}; state.built = {}; delete state.scanFiles.parts; }
+  if (pick.has("relics")) { state.relicCounts = {}; delete state.scanFiles.relics; }
+  if (pick.has("favs")) { state.stars = {}; state.alerts = {}; }
+  if (pick.has("check")) state.weekly = { t: {}, c: [] };
+  if (pick.has("settings")) {
+    state.settings = normaliseState({}).settings; state.hvMin = false;
+    try { localStorage.removeItem("wrc-secret-sound"); } catch (e) {}
+  }
+  if (pick.has("secrets")) {
+    state.unlocked = {}; state.secrets = {}; state.banners = {};
+    if (!THEMES.some(t => t[0] === S().theme)) S().theme = DEFAULT_SETTINGS.theme;
+  }
+  save(); decoFor = undefined;
+  applyDisplay(); applyTheme(); renderDrawer(); renderWeekly(); renderAll();
+  if (typeof checkInfection === "function") checkInfection();
+}
+
 function applyDisplay() {
   const st = S(), b = document.body.classList;
   b.toggle("no-oracle", !st.show.oracle);
@@ -838,7 +923,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, bd: state.building, bl: Object.keys(state.built) });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -852,7 +937,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, building: p.bd, built: set(p.bl) });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -881,7 +966,8 @@ function openVault(itemId) {
     <button class="builtbtn" data-close>Got it</button></article></div>`;
   refreshCards(itemId);
 }
-const closeModal = () => { $("#modalRoot").innerHTML = ""; };
+let modalOnClose = null; // run once when the current pop-up closes
+const closeModal = () => { $("#modalRoot").innerHTML = ""; const f = modalOnClose; modalOnClose = null; if (f) f(); };
 
 /* ---------- TOUR + WHAT'S NEW ---------- */
 const TOUR = [
@@ -893,14 +979,12 @@ const TOUR = [
 ];
 /* Update WHATS_NEW with each APK release: friends see it once after updating. */
 const WHATS_NEW = {
-  id: "2026-11-a",
+  id: "2026-11-b",
   items: [
-    "A–Z sort on All, and collapsible Primary, Secondary and Melee sections on Weapons.",
-    "Primes that don't come from relics, with a How to get note.",
-    "New Duviri theme, plus a tidier Settings menu with new info switches, Reduce motion, Compact cards, Text size and Start page.",
-    "A daily and weekly checklist: swipe in from the right edge.",
-    "Rotating sections fold up, and show this week's Steel Path Circuit Incarnons. Relic Runs gets a Normal / Steel Path fissure toggle. Pull down to refresh.",
-    "Some days look a little different. And a few secrets are hidden around the app…",
+    "Inventory Scan in Settings: upload a recording of your relics or Prime parts and the app reads them. Relic counts show next to each relic.",
+    "Foundry tracker: items with every part move to the top of Main as Ready to build. Tap Building to start a countdown, and the app tells you when it's ready to claim.",
+    "Clear data in Settings, for wiping just the parts you choose.",
+    "Tidier fissure rows, a solid top bar, and cleaner How to get text.",
   ],
 };
 function showTour() {
@@ -936,10 +1020,25 @@ function showWhatsNew() {
     <p class="secsub" style="margin:8px 0 0">You can turn this off under Settings › Info shown.</p></div>
     <button class="builtbtn" data-close>Got it</button></article></div>`;
 }
+function maybeNews() {
+  if (state.newsSeen === WHATS_NEW.id) return;
+  if (S().show.whatsnew) showWhatsNew(); else { state.newsSeen = WHATS_NEW.id; save(); }
+}
+const dueClaims = () => Object.keys(state.building).filter(id => state.building[id].e <= Date.now());
+function showClaims(ids) {
+  $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">Foundry</div></div>
+    <div class="mbody"><p>These items are ready to claim from the Foundry:</p><ul class="news">${ids.map(id => `<li>${esc((BYID[id] || {}).n || state.building[id].n || id)}</li>`).join("")}</ul></div>
+    <button class="builtbtn" data-close>Got it</button></article></div>`;
+  modalOnClose = () => {
+    ids.forEach(id => { delete state.building[id]; state.built[id] = 1; });
+    save(); renderMain(); renderFavs(); setTimeout(maybeNews, 250);
+  };
+}
 function afterIntro() {
   if ($("#modal") || document.querySelector(".stalker-take")) return;
-  if (!state.tourDone) showTour();
-  else if (state.newsSeen !== WHATS_NEW.id) { if (S().show.whatsnew) showWhatsNew(); else { state.newsSeen = WHATS_NEW.id; save(); } }
+  if (!state.tourDone) { showTour(); return; }
+  const c = dueClaims();
+  if (c.length) showClaims(c); else maybeNews();
 }
 
 /* ---------- RENDER ALL ---------- */
@@ -958,8 +1057,10 @@ function bindEvents() {
   const pages = $("#pages");
   pages.addEventListener("change", e => {
     const u = e.target.dataset.u; if (!u) return;
-    if (e.target.checked) { state.ticks[u] = 1; blinkBuddy(); } else delete state.ticks[u];
-    save(); refreshCards(e.target.dataset.it); queueDerived();
+    const id = e.target.dataset.it, it = BYID[id], was = it && readyToBuild(it), hadB = !!(state.building[id] || state.built[id]);
+    if (e.target.checked) { state.ticks[u] = 1; blinkBuddy(); } else { delete state.ticks[u]; clearBuild(id); }
+    save(); refreshCards(id); queueDerived();
+    if (it && (was !== readyToBuild(it) || (hadB && !e.target.checked))) setTimeout(() => { renderMain(); renderFavs(); }, 350);
   });
   pages.addEventListener("click", async e => {
     const t = e.target;
@@ -977,8 +1078,15 @@ function bindEvents() {
     const m = t.closest("[data-mastered]");
     if (m) {
       const id = m.dataset.mastered;
-      if (state.mastered[id]) delete state.mastered[id]; else state.mastered[id] = 1;
+      if (state.mastered[id]) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); }
       save(); renderMain(); renderFavs(); renderRuns();
+      return;
+    }
+    const bb = t.closest("[data-build]");
+    if (bb) {
+      const it = BYID[bb.dataset.build]; if (!it) return;
+      state.building[it.id] = { e: Date.now() + buildHours(it) * 3600e3, n: it.n };
+      save(); renderMain(); renderFavs();
       return;
     }
     const ex = t.closest("[data-exp]");
@@ -1037,6 +1145,8 @@ function bindEvents() {
       return;
     }
     if (e.target.id === "tourBtn") { setDrawer(false); setTimeout(showTour, 250); return; }
+    if (e.target.id === "clearBtn") { setDrawer(false); setTimeout(showClear, 250); return; }
+    if (e.target.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); return; }
     if (e.target.id === "bkCopy") {
       const code = await makeBackup(); const ok = await copyText(code);
       $("#bkIn").value = code; say(e.target, ok ? "Backup code copied" : "Copy blocked: the code is in the box below"); return;
@@ -1054,6 +1164,7 @@ function bindEvents() {
     if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
     if (t.dataset.disp) { S()[t.dataset.disp] = t.checked; save(); applyDisplay(); return; }
     if (t.id === "startSel") { S().startPage = +t.value; save(); }
+    if (t.dataset.scan && t.files && t.files[0]) { const f = t.files[0]; t.value = ""; if (window.runScan) window.runScan(t.dataset.scan, f); }
   });
   dr.addEventListener("input", e => {
     if (e.target.id !== "tsize") return;

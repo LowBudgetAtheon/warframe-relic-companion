@@ -82,6 +82,28 @@ jobs:
           cp lb/package/files/lobster-latin-400-normal.woff2 "$W/fonts/"
           ls -la "$W" "$W/fonts"
 
+      - name: Bundle the Inventory Scan text reader
+        # if this fails the APK still builds; the scan then says its reader didn't load
+        continue-on-error: true
+        run: |
+          W="$GITHUB_WORKSPACE/android/app/src/main/assets/www"
+          cd "$RUNNER_TEMP"
+          # Tesseract, loaded only when a scan starts
+          T="$W/vendor/tesseract" && mkdir -p "$T"
+          npm pack tesseract.js@5 tesseract.js-core@5 @tesseract.js-data/eng@1 --silent
+          mkdir tj tc td
+          tar xzf tesseract.js-5*.tgz -C tj
+          tar xzf tesseract.js-core-*.tgz -C tc
+          tar xzf tesseract.js-data-eng-*.tgz -C td
+          cp tj/package/dist/tesseract.min.js tj/package/dist/worker.min.js "$T/"
+          # only the LSTM engine is used, so only its builds are needed
+          cp tc/package/tesseract-core*lstm*.wasm.js "$T/" 2>/dev/null || cp tc/package/tesseract-core*.wasm.js "$T/"
+          cp tc/package/tesseract-core*lstm*.wasm "$T/" 2>/dev/null || true
+          ENG=$(find td/package -path '*best_int*' -name 'eng.traineddata.gz' | head -1)
+          [ -n "$ENG" ] || ENG=$(find td/package -name 'eng.traineddata.gz' | head -1)
+          gunzip -c "$ENG" > "$T/eng.traineddata"
+          ls -la "$T"
+
       - name: Decode the signing key
         env:
           KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

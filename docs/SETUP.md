@@ -85,3 +85,11 @@ each year), and 7/7. Birthday days only exist on phones where their code was ent
 `WHATS_NEW` near the tour code in `web/app.js` lists the changes shown once after an
 update. Give it a new `id` and items with each release you want announced; anyone who
 turned the pop-up off under Settings › Info shown won't see it.
+
+## Inventory Scan
+
+`web/inventory.js` reads names off a screen recording on the phone. The APK build bundles
+Tesseract (tesseract.js 5, its LSTM core and the English model) into `www/vendor/tesseract/`;
+nothing is fetched at run time and nothing leaves the phone. The scan matches what it reads
+against the names in `data/relics.json`, so it can only find relics and parts the app knows.
+A clip recorded on the console reads far better than one filmed off a TV with a phone.
