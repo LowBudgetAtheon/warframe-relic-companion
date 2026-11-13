@@ -38,17 +38,32 @@ const SHOW_SWITCHES = [
 ];
 const START_PAGES = [[0, "Rotating"], [1, "Relic Runs"], [2, "Favorites"], [3, "Main"]];
 const CATS = [
-  ["all", "All Primes"], ["weapons", "Weapons"], ["warframes", "Warframes"], ["archwing", "Archwing"],
-  ["archgun", "Arch-gun"], ["archmelee", "Arch-melee"], ["companions", "Companions"], ["other", "Other"],
+  ["all", "All"], ["warframes", "Warframes"], ["weapons", "Weapons"], ["vehicles", "Vehicles"], ["archweapons", "Arch-weapons"],
+  ["companions", "Companions"], ["modweapons", "Modular weapons"], ["modcompanions", "Modular companions"], ["amps", "Amps"], ["tauron", "Tauron Strikes"],
 ];
 const CAT_LABEL = Object.fromEntries(CATS);
-const SLOT_ORDER = ["Primary", "Secondary", "Melee"];
+const CAT_INTRO = {
+  all: "Everything that counts toward mastery. Base holds the regular versions and their variants; Prime holds every Prime set. Tap a star to add something to Favorites.",
+  warframes: "Every Warframe. Tap a card's parts as you collect them, then Mastered once it's rank 30.",
+  weapons: "Primary, Secondary and Melee weapons. Variants like MK1, Vandal, Wraith and Kuva sit in their base weapon's card.",
+  vehicles: "Archwings, Necramechs and K-Drives.",
+  archweapons: "Arch-guns and Arch-melee, used with your Archwing and Necramech.",
+  companions: "Sentinels and their weapons, Kubrows and Kavats.",
+  modweapons: "Zaws from Cetus and Kitguns from Fortuna and the Necralisk. Only one piece of each counts for mastery.",
+  modcompanions: "Hounds, MOAs, Predasites and Vulpaphylas, built from parts. Only one piece of each counts for mastery.",
+  amps: "Operator Amps, built from parts at Cetus and Fortuna, plus the Drifter's Sirocco.",
+  tauron: "The five Tektolyst Artifacts and their Tauron Strikes. These don't count toward mastery; the ticks are just for your collection.",
+};
+const MG_LINE = { base: "Regular versions of everything that gives mastery, with their variants in the same card.", prime: "Every Prime set, with the relics that drop its parts." };
+const PRIME_CAT = { archgun: "archweapons", archmelee: "archweapons", archwing: "vehicles" };
+const SLOTTED = new Set(["weapons", "archweapons"]); // slots become their own dropdowns
+const SLOT_ORDER = ["Primary", "Secondary", "Melee", "Arch-gun", "Arch-melee", "Archwing", "Necramech", "K-Drive", "Sentinel", "Sentinel weapon", "Kubrows", "Kavats", "Zaws", "Kitguns", "Amps", "Sirocco"];
 const TIER_ORDER = { Lith: 0, Meso: 1, Neo: 2, Axi: 3, Requiem: 4, Omnia: 5 };
 const RAR = { C: "Common", U: "Uncommon", R: "Rare" };
 const RAR_ORDER = { R: 0, U: 1, C: 2 };
 const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
 const DEFAULT_SETTINGS = {
-  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {},
+  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, mainOpen: {}, runsOpen: {}, rotOpen: {}, hideVend: {},
   show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true, whatsnew: true },
   reduceMotion: false, compact: false, textSize: 100, startPage: 3, fissMode: "normal",
 };
@@ -98,7 +113,7 @@ function normaliseState(s) {
     hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
     relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
     building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
-    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
+    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
 let state = loadState();
@@ -107,13 +122,20 @@ function save() { try { localStorage.setItem(KEY_STATE, JSON.stringify(state)); 
 
 /* ---------- DATA ---------- */
 let DATA = { items: [], relics: {} }, DATA_AT = 0, DATA_SRC = "none", DATA_OFFLINE = false;
-let ITEMS = [], BYNAME = {}, BYID = {};
+let ITEMS = [], BASE = [], ALL = [], GROUPS = {}, BYNAME = {}, BYID = {}; // ITEMS = Primes, BASE = everything else
 function setData(d, at, src) {
   DATA = d; DATA_AT = at || 0; DATA_SRC = src;
-  ITEMS = (d.items || []).slice().sort((a, b) => a.n.localeCompare(b.n));
+  const byN = (a, b) => a.n.localeCompare(b.n);
+  ITEMS = (d.items || []).slice().sort(byN);
+  ITEMS.forEach(it => { if (PRIME_CAT[it.cat]) it.cat = PRIME_CAT[it.cat]; });
+  BASE = (d.base || []).slice().sort(byN);
+  GROUPS = d.groups || {};
+  ALL = ITEMS.concat(BASE);
   BYNAME = {}; BYID = {};
-  ITEMS.forEach(it => { delete it._units; BYNAME[it.n] = it; BYID[it.id] = it; });
+  ALL.forEach(it => { delete it._units; if (!BYNAME[it.n]) BYNAME[it.n] = it; BYID[it.id] = it; });
 }
+const counts = it => it.k !== "t"; // Tauron Strikes don't count toward mastery
+const grpItems = gid => BASE.filter(i => i.grp === gid);
 const relicInfo = r => (DATA.relics || {})[r] || {};
 
 let LIVE = null, LIVE_AT = 0, LIVE_OFFLINE = false;
@@ -124,6 +146,8 @@ let LIVE = null, LIVE_AT = 0, LIVE_OFFLINE = false;
 function unitsOf(it) {
   if (it._units) return it._units;
   const out = [];
+  if (it.k === "m") return (it._units = []); // modular piece: its one tick is Mastered
+  if (it.k === "t" || it.own) out.push({ id: slug(`${it.n}|own|1`), label: it.k === "t" ? "Collected" : "Owned", full: it.n, i: 1, c: 1, group: null, r: [], own: 1 });
   const add = (grp, p) => {
     for (let i = 1; i <= (p.c || 1); i++)
       out.push({ id: slug(`${it.n}|${grp || ""}|${p.p}|${i}`), label: p.p, full: p.full, i, c: p.c || 1, group: grp, r: p.r || [] });
@@ -173,7 +197,8 @@ const active = it => !state.mastered[it.id];
 const BUILD_H = { warframes: 72, archwing: 72 };
 const buildHours = it => it.bt || BUILD_H[it.cat] || 12;
 const isComplete = it => { const { n, g } = progress(it); return n > 0 && g === n; };
-const readyToBuild = it => active(it) && isComplete(it) && !state.building[it.id] && !state.built[it.id];
+const buildable = it => !it.own && !it.k && (it.parts || []).length > 0;
+const readyToBuild = it => buildable(it) && active(it) && isComplete(it) && !state.building[it.id] && !state.built[it.id];
 function buildTag(it) {
   const b = state.building[it.id]; if (!b) return "";
   return `<span class="btag">Building <em>${b.e > Date.now() ? until(b.e) : "done"}</em></span>`;
@@ -293,8 +318,17 @@ function cardHTML(it) {
   let h = `<article class="${cls}" data-item="${it.id}"><div class="chead" data-exp="${it.id}">
     <div class="ctop"><div class="name">${esc(it.n)}</div>${vwHTML(it)}<button class="star${state.stars[it.id] ? " on" : ""}" data-star="${it.id}" aria-label="Star">${state.stars[it.id] ? "★" : "☆"}</button></div>
     <div class="meta"><span class="tag">${esc(it.slot || CAT_LABEL[it.cat] || "Prime")}</span>${buildTag(it)}<span class="cnt">${cntText(it)}</span></div>
-    <div class="cbar"><i style="width:${isM ? 100 : n ? 100 * g / n : 0}%"></i></div></div>${rtbHTML(it)}<ul>`;
-  let open = null;
+    <div class="cbar"><i style="width:${isM ? 100 : n ? 100 * g / n : 0}%"></i></div></div>${primeLink(it.prime)}${rtbHTML(it)}${unitsHTML(it)}`;
+  if (it.note) h += `<div class="note tip">${esc(it.note)}</div>`;
+  if (it.get) h += `<div class="note get"><b>How to get:</b> ${esc(it.get)}</div>`;
+  const info = !it.b || it.wiki;
+  if (info) h += `<div class="more${expanded.has(it.id) ? "" : " hidden"}">${expanded.has(it.id) ? moreHTML(it) : ""}</div>`;
+  h += `<div class="cfoot"><button class="builtbtn" data-mastered="${it.id}">${isM ? "Mastered ✓" : "Mastered"}</button>${info ? `<button class="expbtn" data-exp="${it.id}">${expLabel(it)}</button>` : ""}</div></article>`;
+  return h;
+}
+const expLabel = it => expanded.has(it.id) ? "Hide info ▴" : it.b ? "Info ▾" : "Relics & info ▾";
+function unitsHTML(it) {
+  let h = `<ul>`, open = null;
   unitsOf(it).forEach(u => {
     if (u.group !== open) {
       if (open) h += `</ul></details></li>`;
@@ -305,17 +339,46 @@ function cardHTML(it) {
     h += `<li><label><input type="checkbox" data-u="${u.id}" data-it="${it.id}"${isTicked(u) ? " checked" : ""}><span>${esc(u.label)}</span>${sub}</label></li>`;
   });
   if (open) h += `</ul></details></li>`;
-  h += `</ul>`;
+  return h + `</ul>`;
+}
+const primeLink = pn => { const p = pn && BYNAME[pn]; return p ? `<button class="plink" data-jump="${p.id}">${esc(pn)} is in the Prime list ›</button>` : ""; };
+/* A card holding several Base items: variants (Braton, MK1-Braton, Braton Vandal), or one tick per
+   modular piece (Zaw strikes), or Tauron Strikes. Each item inside keeps its own id and state. */
+function grpCnt(gid) {
+  const all = grpItems(gid), t = all.length && all[0].k === "t";
+  const got = all.filter(i => t ? isTicked(unitsOf(i)[0]) : state.mastered[i.id]).length;
+  return `${got} / ${all.length} ${t ? "collected" : "mastered"}`;
+}
+function vsubHTML(it) {
+  const { n, g } = progress(it), isM = !!state.mastered[it.id];
+  let h = `<div class="vsub${isM ? " built" : ""}" data-item="${it.id}"><div class="vhead"><b>${esc(it.n)}</b>${buildTag(it)}<span class="cnt">${cntText(it)}</span></div>
+    <div class="cbar"><i style="width:${isM ? 100 : n ? 100 * g / n : 0}%"></i></div>${rtbHTML(it)}${unitsHTML(it)}`;
   if (it.note) h += `<div class="note tip">${esc(it.note)}</div>`;
-  if (it.get) h += `<div class="note get"><b>How to get:</b> ${esc(it.get)}</div>`;
-  h += `<div class="more${expanded.has(it.id) ? "" : " hidden"}">${expanded.has(it.id) ? moreHTML(it) : ""}</div>`;
-  h += `<div class="cfoot"><button class="builtbtn" data-mastered="${it.id}">${isM ? "Mastered ✓" : "Mastered"}</button><button class="expbtn" data-exp="${it.id}">${expanded.has(it.id) ? "Hide info ▴" : "Relics & info ▾"}</button></div></article>`;
-  return h;
+  if (it.get) h += `<div class="note get"><b>How to get:</b> ${esc(it.get)}${it.wiki ? ` <a href="${esc(it.wiki)}" target="_blank" rel="noopener">Wiki ↗</a>` : ""}</div>`;
+  return h + `<div class="cfoot"><button class="builtbtn" data-mastered="${it.id}">${isM ? "Mastered ✓" : "Mastered"}</button></div></div>`;
+}
+function mrowHTML(it) {
+  const t = it.k === "t", u = t && unitsOf(it)[0], on = t ? isTicked(u) : !!state.mastered[it.id];
+  const box = t ? `data-u="${u.id}" data-it="${it.id}"` : `data-m="${it.id}"`;
+  return `<li class="mrow${on ? " on" : ""}" data-item="${it.id}"><label><input type="checkbox" ${box}${on ? " checked" : ""}><span>${esc(it.n)}</span></label>
+    ${it.get ? `<details class="mget"><summary aria-label="How to get ${esc(it.n)}">How to get ▾</summary><div class="note get"><b>How to get:</b> ${esc(it.get)}${it.wiki ? ` <a href="${esc(it.wiki)}" target="_blank" rel="noopener">Wiki ↗</a>` : ""}</div></details>` : ""}</li>`;
+}
+function gcardHTML(e) {
+  const g = e.g, gid = e.key;
+  let h = `<article class="card gcard" data-grp="${gid}"><div class="chead" style="cursor:default"><div class="ctop"><div class="name">${esc(g.n)}</div>
+    <button class="star${state.stars[gid] ? " on" : ""}" data-star="${gid}" aria-label="Star">${state.stars[gid] ? "★" : "☆"}</button></div>
+    <div class="meta"><span class="tag">${esc(g.slot || CAT_LABEL[g.cat] || "")}</span><span class="cnt gcnt">${grpCnt(gid)}</span></div></div>`;
+  if (g.note) h += `<p class="secsub gnote">${esc(g.note)}</p>`;
+  h += primeLink(g.prime);
+  if (g.kind === "var") h += e.items.map(vsubHTML).join("");
+  else h += `<ul class="mrows">${e.items.map(mrowHTML).join("")}</ul>`;
+  return h + `</article>`;
 }
 const rtbHTML = it => readyToBuild(it) ? `<div class="rtb"><span>Ready to build</span><button class="chip" data-build="${it.id}">Building</button></div>` : "";
 function cntText(it) {
   const { n, g } = progress(it);
   if (state.mastered[it.id]) return "Mastered ✓";
+  if (it.own || it.k === "t") return g ? `${it.k === "t" ? "Collected" : "Owned"} ✓` : "";
   if (state.building[it.id] || state.built[it.id]) return "All parts ✓";
   if (n && g === n) return `${g} / ${n} parts ✓`;
   return `${g} / ${n} parts`;
@@ -330,19 +393,24 @@ function groupCounts(card, it) {
 }
 function refreshCards(itemId) {
   const it = BYID[itemId]; if (!it) return;
-  document.querySelectorAll(`.card[data-item="${itemId}"]`).forEach(card => {
+  document.querySelectorAll(`[data-item="${itemId}"]`).forEach(card => {
     const { n, g } = progress(it), isM = !!state.mastered[it.id];
     card.classList.toggle("complete", g === n && n > 0 && !isM);
     card.classList.toggle("built", isM);
-    card.querySelector(".cnt").textContent = cntText(it);
-    card.querySelector(".cbar i").style.width = (isM ? 100 : n ? 100 * g / n : 0) + "%";
+    card.classList.toggle("on", card.classList.contains("mrow") && (it.k === "t" ? g > 0 : isM));
+    const cnt = card.querySelector(".cnt"); if (cnt) cnt.textContent = cntText(it);
+    const bar = card.querySelector(".cbar i"); if (bar) bar.style.width = (isM ? 100 : n ? 100 * g / n : 0) + "%";
     card.querySelectorAll("input[data-u]").forEach(i => { i.checked = !!state.ticks[i.dataset.u]; });
+    card.querySelectorAll("input[data-m]").forEach(i => { i.checked = !!state.mastered[i.dataset.m]; });
+    if (!card.classList.contains("card")) return;
     groupCounts(card, it);
-    if (expanded.has(it.id)) card.querySelector(".more").innerHTML = moreHTML(it);
+    const more = card.querySelector(".more");
+    if (expanded.has(it.id) && more) more.innerHTML = moreHTML(it);
     const old = card.querySelector(".vw"), nu = vwHTML(it);
     if (old) old.remove();
     if (nu) card.querySelector(".star").insertAdjacentHTML("beforebegin", nu);
   });
+  if (it.grp) document.querySelectorAll(`[data-grp="${it.grp}"] .gcnt`).forEach(el => { el.textContent = grpCnt(it.grp); });
 }
 
 /* ---------- EXPANDED ITEM INFO ---------- */
@@ -354,9 +422,10 @@ function relRow(r, rar, kind) {
     const fr = resurgenceFrames(r);
     tag = `<span class="rtag">Prime Resurgence</span>${fr.length ? `<span class="sub" style="margin-left:0">back with ${esc(fr.join(", "))}</span>` : ""}`;
   } else if (kind === "ba-off") tag = `<span class="vtag">Baro Ki'Teer only</span>`;
-  return `<div class="relrow"><span class="rn">${esc(r)}${ownRel(r)}</span><span class="rar ${rar}">${RAR[rar] || rar}</span>${ch}${tag}${kind ? "" : farmHTML(r)}</div>`;
+  return `<div class="relrow"><button class="rn relbtn" data-relic="${esc(r)}">${esc(r)}</button>${ownRel(r)}<span class="rar ${rar}">${RAR[rar] || rar}</span>${ch}${tag}${kind ? "" : farmHTML(r)}</div>`;
 }
 function moreHTML(it) {
+  if (it.b) return infoHTML(it);
   const sh = S().show;
   let h = "";
   allParts(it).forEach(p => {
@@ -432,29 +501,38 @@ function infoHTML(it) {
   return h;
 }
 
-/* ---------- PAGE: MAIN ---------- */
+/* ---------- PAGE: MAIN ----------
+   Two dropdowns, Base then Prime, under one pinned bar: category, search and a filter button. */
 let mainCat = "all", mainQuery = "", showMastered = false, hideDone = false;
+const FILTER_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>`;
+const catsWithItems = () => CATS.filter(([k]) => k === "all" || ALL.some(it => (it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat) === k));
 function buildMain() {
-  $("#main").innerHTML = `<header><h1><select class="titlesel" id="catSel" aria-label="Category">${CATS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></h1>
-    <p>Every Prime set. Tap a star to add it to Favorites, tap an item for its relics and farms.</p></header>
-    <section class="summary"><div class="sumrow"><span>Parts collected</span><b id="mainSum">0 / 0</b></div>
-      <div class="sumsub" id="mainSub"></div><div class="bar"><i id="mainBar"></i></div>
-      <input class="search" id="search" type="search" placeholder="Search Primes or parts" autocomplete="off">
-      <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By type</button><button class="chip" data-sort="az">A–Z</button></div>
-      <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
-      <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button><span class="toast" data-toast></span></div></section>
+  $("#main").innerHTML = `<header><h1 id="catTitle">All</h1><p id="catIntro"></p></header>
+    <div class="mbar" id="mbar"><div class="mbarrow">
+      <label class="catwrap"><span class="sr">Category</span><select class="catsel" id="catSel"></select></label>
+      <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
+      <button class="iconbtn" id="filtBtn" aria-label="Sort and filters" aria-expanded="false">${FILTER_SVG}</button></div>
+      <div class="fpanel hidden" id="fpanel">
+        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By type</button><button class="chip" data-sort="az">A–Z</button></div>
+        <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
+        <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button></div></div></div>
     <div id="mainList"></div>
-    <footer>Relic data from the <a href="https://wiki.warframe.com/w/Void_Relic" target="_blank">WARFRAME Wiki</a>, DE's official drop tables and WFCD community data. Orokin Cells and credits aren't listed. To master an item you still have to level it to rank 30 after you build it.</footer>`;
+    <footer>Data from the <a href="https://wiki.warframe.com/" target="_blank">WARFRAME Wiki</a>, DE's official drop tables and WFCD community data. Resources like Orokin Cells and credits aren't listed. To master an item you still have to level it to rank 30 after you build it.</footer>`;
+  fillCats();
   $("#catSel").addEventListener("change", e => { mainCat = e.target.value; renderMain(); $("#pg-main").scrollTop = 0; });
+  $("#filtBtn").addEventListener("click", e => {
+    const p = $("#fpanel"), open = p.classList.toggle("hidden") === false;
+    e.currentTarget.setAttribute("aria-expanded", open);
+  });
   $("#sortCtl").addEventListener("click", e => {
     const b = e.target.closest("[data-sort]"); if (!b) return;
     S().mainSort = b.dataset.sort; save(); renderMain();
   });
-  // weapon slot dropdowns remember whether they're open
+  // dropdowns (Base / Prime, weapon slots) remember whether they're open
   $("#mainList").addEventListener("toggle", e => {
-    const d = e.target; if (!d.matches || !d.matches("details.secgrp") || mainQuery) return;
-    if (d.open) delete S().collapsed[d.dataset.slot]; else S().collapsed[d.dataset.slot] = 1;
-    save();
+    const d = e.target; if (!d.matches || mainQuery) return;
+    if (d.matches("details.secgrp")) { if (d.open) delete S().collapsed[d.dataset.slot]; else S().collapsed[d.dataset.slot] = 1; save(); }
+    if (d.matches("details.mgrp")) { S().mainOpen[d.dataset.mg] = d.open ? 1 : 0; save(); }
   }, true);
   $("#search").addEventListener("input", e => {
     if (secretSearch(e.target.value)) { e.target.value = ""; e.target.blur(); mainQuery = ""; renderMain(); return; }
@@ -463,99 +541,211 @@ function buildMain() {
   $("#showM").addEventListener("click", e => { showMastered = !showMastered; e.currentTarget.setAttribute("aria-pressed", showMastered); renderMain(); });
   $("#hideD").addEventListener("click", e => { hideDone = !hideDone; e.currentTarget.setAttribute("aria-pressed", hideDone); renderMain(); });
 }
-function mainItems() {
+function fillCats() {
+  const sel = $("#catSel"); if (!sel) return;
+  const list = catsWithItems();
+  if (!list.some(([k]) => k === mainCat)) mainCat = "all";
+  sel.innerHTML = list.map(([k, l]) => `<option value="${k}"${k === mainCat ? " selected" : ""}>${l}</option>`).join("");
+}
+const catOf = it => it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat;
+const slotOf = it => it.grp && GROUPS[it.grp] ? GROUPS[it.grp].slot : it.slot;
+function passes(it) {
   const q = mainQuery;
-  return ITEMS.filter(it => {
-    if (mainCat !== "all" && it.cat !== mainCat) return false;
-    if (state.mastered[it.id] && !showMastered) return false;
-    if (hideDone) { const { n, g } = progress(it); if (n && g === n) return false; }
-    if (q && !it.n.toLowerCase().includes(q) && !unitsOf(it).some(u => (u.full || "").toLowerCase().includes(q))) return false;
-    return true;
+  if (mainCat !== "all" && catOf(it) !== mainCat) return false;
+  if (state.mastered[it.id] && !showMastered) return false;
+  if (hideDone && it.k !== "m") { const { n, g } = progress(it); if (n && g === n) return false; }
+  if (q && !it.n.toLowerCase().includes(q) && !(it.grp && GROUPS[it.grp] && GROUPS[it.grp].n.toLowerCase().includes(q))
+    && !unitsOf(it).some(u => (u.full || "").toLowerCase().includes(q))) return false;
+  return true;
+}
+/* Display entries: one per card. Base items in a group share one entry. */
+function entriesOf(list) {
+  const m = new Map();
+  list.forEach(it => {
+    const g = it.grp && GROUPS[it.grp], key = g ? it.grp : it.id;
+    if (!m.has(key)) m.set(key, { key, g, items: [], cat: catOf(it), slot: slotOf(it), n: g ? g.n : it.n });
+    m.get(key).items.push(it);
   });
+  return [...m.values()].sort((a, b) => a.n.localeCompare(b.n));
 }
-function sectionsFor(items) {
-  const secs = new Map();
-  const key = it => {
-    if (mainCat === "all" && S().mainSort === "az") return null;
-    if (mainCat === "all") return it.cat === "weapons" ? `Weapons · ${it.slot || "Other"}` : CAT_LABEL[it.cat] || "Other";
-    if (it.cat === "weapons") return it.slot || "Other";
-    return null;
-  };
-  items.forEach(it => { const k = key(it); if (!secs.has(k)) secs.set(k, []); secs.get(k).push(it); });
-  const order = k => {
-    if (k == null) return 0;
-    const base = k.startsWith("Weapons · ") ? 0 : CATS.findIndex(c => c[1] === k) * 10;
-    const slot = k.replace("Weapons · ", "");
-    const si = SLOT_ORDER.indexOf(slot);
-    return base + (si < 0 ? (k.startsWith("Weapons") || mainCat === "weapons" ? 5 : 0) : si);
-  };
-  return [...secs.entries()].sort((a, b) => order(a[0]) - order(b[0]) || String(a[0]).localeCompare(String(b[0])));
+function sectionsFor(entries) {
+  const secs = new Map(), az = mainCat === "all" && S().mainSort === "az";
+  const one = mainCat !== "all" && new Set(entries.map(e => e.slot)).size > 1;
+  const key = e => az ? null : mainCat === "all" ? (SLOTTED.has(e.cat) ? `${CAT_LABEL[e.cat]} · ${e.slot || "Other"}` : CAT_LABEL[e.cat] || "Other") : one ? e.slot || "Other" : null;
+  entries.forEach(e => { const k = key(e); if (!secs.has(k)) secs.set(k, { cat: e.cat, list: [] }); secs.get(k).list.push(e); });
+  const order = (k, v) => k == null ? 0 : CATS.findIndex(c => c[0] === v.cat) * 100 + Math.max(0, SLOT_ORDER.indexOf(k.split(" · ").pop()));
+  return [...secs.entries()].sort((a, b) => order(a[0], a[1]) - order(b[0], b[1]) || String(a[0]).localeCompare(String(b[0])));
 }
-function renderMain() {
-  const items = mainItems();
+const entryHTML = e => e.g ? gcardHTML(e) : cardHTML(e.items[0]);
+const entryReady = e => e.items.some(readyToBuild);
+function listHTML(mg, items) {
+  const entries = entriesOf(items);
+  if (!entries.length) return `<p class="empty">${mainQuery ? "Nothing matches that search." : "Nothing left here. Everything's mastered!"}</p>`;
   let h = "";
-  if (!ITEMS.length) h = `<p class="empty">Loading the Prime list…</p>`;
-  else if (!items.length) h = `<p class="empty">${mainQuery ? "Nothing matches that search." : "Nothing left here. Everything's mastered!"}</p>`;
-  else {
-    const ready = items.filter(readyToBuild);
-    if (ready.length) h += `<h2 class="sec rtbsec">Ready to build</h2><div class="grid">${ready.map(cardHTML).join("")}</div>`;
-    const rest = items.filter(it => !readyToBuild(it));
-    sectionsFor(rest).forEach(([k, list]) => {
-    const grid = `<div class="grid">${list.map(cardHTML).join("")}</div>`;
-    if (k && mainCat === "weapons") {
-      const open = mainQuery || !S().collapsed[k];
-      h += `<details class="secgrp" data-slot="${esc(k)}"${open ? " open" : ""}><summary><h2 class="sec">${esc(k)}</h2><span class="seccnt">${list.length}</span></summary>${grid}</details>`;
-    } else {
-      if (k) h += `<h2 class="sec">${esc(k)}</h2>`;
-      h += grid;
-    }
-    });
-  }
+  const ready = entries.filter(entryReady);
+  if (ready.length) h += `<h2 class="sec rtbsec">Ready to build</h2><div class="grid">${ready.map(entryHTML).join("")}</div>`;
+  sectionsFor(entries.filter(e => !entryReady(e))).forEach(([k, v]) => {
+    const grid = `<div class="grid">${v.list.map(entryHTML).join("")}</div>`;
+    const ck = `${mg}:${k}`;
+    if (k && SLOTTED.has(v.cat)) {
+      const open = mainQuery || !S().collapsed[ck];
+      h += `<details class="secgrp" data-slot="${esc(ck)}"${open ? " open" : ""}><summary><h2 class="sec">${esc(k)}</h2><span class="seccnt">${v.list.length}</span></summary>${grid}</details>`;
+    } else h += (k ? `<h2 class="sec">${esc(k)}</h2>` : "") + grid;
+  });
+  return h;
+}
+function mgCount(pool) {
+  const m = pool.filter(counts), got = m.filter(it => state.mastered[it.id]).length;
+  return { got, tot: m.length, txt: m.length ? `${got} / ${m.length} mastered` : `${pool.filter(it => progress(it).g).length} / ${pool.length} collected` };
+}
+const mgPool = list => list.filter(it => mainCat === "all" || catOf(it) === mainCat);
+function renderMain() {
+  if (!$("#mainList")) return;
+  fillCats();
+  $("#catTitle").textContent = CAT_LABEL[mainCat] || "All";
+  $("#catIntro").textContent = CAT_INTRO[mainCat] || "";
+  let h = "";
+  if (!ALL.length) h = `<p class="empty">Loading the item list…</p>`;
+  else [["base", "Base", BASE], ["prime", "Prime", ITEMS]].forEach(([mg, title, list]) => {
+    const pool = mgPool(list); if (!pool.length) return;
+    const c = mgCount(pool), open = !!mainQuery || !!S().mainOpen[mg];
+    const items = pool.filter(passes);
+    h += `<details class="mgrp" data-mg="${mg}"${open ? " open" : ""}><summary><div class="mgt"><h2>${title}</h2><span class="mgc" data-mgc="${mg}">${c.txt}</span><span class="chev" aria-hidden="true">▾</span></div>
+      <div class="bar"><i data-mgbar="${mg}" style="width:${c.tot ? 100 * c.got / c.tot : 0}%"></i></div><p class="secsub">${MG_LINE[mg]}</p></summary>
+      <div class="mgbody">${open ? listHTML(mg, items) : ""}</div></details>`;
+  });
   const sc = $("#sortCtl");
   sc.classList.toggle("hidden", mainCat !== "all");
   sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
   $("#mainList").innerHTML = h;
-  $("#mainList").querySelectorAll(".card").forEach(c => groupCounts(c, BYID[c.dataset.item]));
-  mainSummary();
+  $("#mainList").querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
+}
+/* A dropdown's cards are only drawn once it's opened, so a long list stays quick */
+function fillMg(d) {
+  const mg = d.dataset.mg, body = d.querySelector(".mgbody");
+  if (!d.open || body.childElementCount) return;
+  body.innerHTML = listHTML(mg, mgPool(mg === "base" ? BASE : ITEMS).filter(passes));
+  body.querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
 }
 function mainSummary() {
-  if (!$("#mainSum")) return;
-  const pool = ITEMS.filter(it => mainCat === "all" || it.cat === mainCat);
-  let tot = 0, got = 0, ready = 0, mast = 0;
-  pool.forEach(it => {
-    if (state.mastered[it.id]) { mast++; return; }
-    const { n, g } = progress(it); tot += n; got += g; if (n && g === n) ready++;
+  [["base", BASE], ["prime", ITEMS]].forEach(([mg, list]) => {
+    const el = document.querySelector(`[data-mgc="${mg}"]`); if (!el) return;
+    const c = mgCount(mgPool(list));
+    el.textContent = c.txt;
+    const bar = document.querySelector(`[data-mgbar="${mg}"]`); if (bar) bar.style.width = (c.tot ? 100 * c.got / c.tot : 0) + "%";
   });
-  $("#mainSum").textContent = `${got} / ${tot}`;
-  $("#mainBar").style.width = (tot ? 100 * got / tot : 0) + "%";
-  $("#mainSub").textContent = `${pool.length - mast} item${pool.length - mast === 1 ? "" : "s"} · ${ready} ready to build${mast ? ` · ${mast} mastered${showMastered ? "" : " (hidden)"}` : ""}`;
+}
+function jumpTo(id) {
+  const it = BYID[id]; if (!it) return;
+  if (mainCat !== "all" && catOf(it) !== mainCat) mainCat = "all";
+  if (state.mastered[id]) showMastered = true;
+  mainQuery = ""; $("#search").value = ""; hideDone = false;
+  S().mainOpen[it.b ? "base" : "prime"] = 1; save();
+  renderMain(); goPage(PAGE_MAIN, true);
+  setTimeout(() => {
+    const c = document.querySelector(`#mainList [data-item="${id}"]`); if (!c) return;
+    const sg = c.closest("details.secgrp"); if (sg && !sg.open) sg.open = true;
+    c.scrollIntoView({ block: "center", behavior: S().reduceMotion ? "auto" : "smooth" });
+    c.classList.add("flash"); setTimeout(() => c.classList.remove("flash"), 1600);
+  }, 120);
 }
 
 /* ---------- PAGE: FAVORITES ---------- */
+const FAV_SORTS = [["az", "A–Z"], ["done", "Closest to done"], ["vault", "Vaulting soonest"]];
 function buildFavs() {
-  $("#favs").innerHTML = `<header><h1>Favorites</h1><p>Every item you've starred. Tap one for its relics and farms.</p></header>
+  $("#favs").innerHTML = `<header><h1>Favorites</h1><p>Every item you've starred, Base and Prime. Tap one for how to get it, its relics and farms.</p></header>
     <section class="summary"><div class="sumrow"><span>Starred parts collected</span><b id="favSum">0 / 0</b></div>
-      <div class="sumsub" id="favSub"></div><div class="bar"><i id="favBar"></i></div></section>
+      <div class="sumsub" id="favSub"></div><div class="bar"><i id="favBar"></i></div>
+      <div class="fbarrow"><span class="ctlk">Sorted <b id="favSortName"></b></span><button class="iconbtn" id="favFilt" aria-label="Sort favorites" aria-expanded="false">${FILTER_SVG}</button></div>
+      <div class="fpanel hidden" id="favPanel"><div class="controls" id="favSort"><span class="ctlk">Sort</span>${FAV_SORTS.map(([k, l]) => `<button class="chip" data-fsort="${k}">${l}</button>`).join("")}</div></div></section>
     <div id="favList"></div>
-    <h2 class="sec">Trade chat helper</h2>
-    <p class="secsub">"Want to buy" messages for the parts you're missing on starred items. Each one stays under ${TRADE_LIMIT} characters.</p>
-    <div id="trade"></div>
+    <details class="tdd" id="tradeDD"><summary><h2 class="sec">Trade chat shortcuts</h2><span class="seccnt" id="tradeCnt"></span><span class="chev" aria-hidden="true">▾</span></summary>
+      <p class="secsub">Ready-made "want to buy" messages for the parts you're missing on starred Primes. Each stays under ${TRADE_LIMIT} characters.</p>
+      <div id="trade"></div>
+      <h3 class="sub3">Write your own</h3>
+      <p class="secsub">Type what you're after, one item at a time. Pick the proper name from the suggestions; the app adds the [brackets] and splits long lists to fit chat.</p>
+      <div class="controls" id="tbMode"><button class="chip" data-tbmode="WTB">WTB</button><button class="chip" data-tbmode="WTS">WTS</button></div>
+      <div class="tbin"><input class="search" id="tbIn" type="text" placeholder="Add an item, e.g. ash prime systems" autocomplete="off" aria-label="Item to add" list="tbList"><datalist id="tbList"></datalist>
+        <button class="chip" id="tbAdd">Add</button></div><span class="toast" data-toast></span>
+      <div class="tbchips" id="tbChips"></div><div id="tbOut"></div></details>
     <footer>Tap Copy, then paste into trade chat. Duplicates show as x2.</footer>`;
+  $("#favFilt").addEventListener("click", e => { const open = $("#favPanel").classList.toggle("hidden") === false; e.currentTarget.setAttribute("aria-expanded", open); });
+  $("#favSort").addEventListener("click", e => { const b = e.target.closest("[data-fsort]"); if (!b) return; S().favSort = b.dataset.fsort; save(); renderFavs(); });
+  $("#tradeDD").addEventListener("toggle", e => { S().tradeOpen = e.target.open ? 1 : 0; save(); });
+  bindTradeBuilder();
+}
+const favMissing = e => e.items.filter(i => counts(i) && active(i)).reduce((a, i) => { const { n, g } = progress(i); return a + (i.k === "m" ? 1 : n - g); }, 0);
+const favVault = e => { const ends = e.items.flatMap(i => alertsFor(i).map(a => a.end || 9e15)); return ends.length ? Math.min(...ends) : Infinity; };
+function favEntries(list) {
+  return entriesOf(list.filter(it => state.stars[it.id] || (it.grp && state.stars[it.grp])));
+}
+function sortFav(entries) {
+  const k = S().favSort || "az";
+  const by = { az: () => 0, done: (a, b) => favMissing(a) - favMissing(b), vault: (a, b) => favVault(a) - favVault(b) }[k] || (() => 0);
+  return entries.sort((a, b) => by(a, b) || a.n.localeCompare(b.n));
 }
 function renderFavs() {
-  const items = starred();
-  $("#favList").innerHTML = items.length ? `<div class="grid">${items.map(cardHTML).join("")}</div>`
-    : `<p class="empty">No favorites yet. Tap the ☆ on any item on the Main page.</p>`;
-  $("#favList").querySelectorAll(".card").forEach(c => groupCounts(c, BYID[c.dataset.item]));
+  const base = sortFav(favEntries(BASE)), prime = sortFav(favEntries(ITEMS));
+  let h = "";
+  if (base.length) h += `<h2 class="sec">Base</h2><div class="grid">${base.map(entryHTML).join("")}</div>`;
+  if (prime.length) h += `<h2 class="sec">Prime</h2><div class="grid">${prime.map(entryHTML).join("")}</div>`;
+  $("#favList").innerHTML = h || `<p class="empty">No favorites yet. Tap the ☆ on any item on the Main page.</p>`;
+  $("#favList").querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
+  const sk = S().favSort || "az";
+  $("#favSortName").textContent = (FAV_SORTS.find(x => x[0] === sk) || FAV_SORTS[0])[1];
+  document.querySelectorAll("[data-fsort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.fsort === sk));
+  $("#tradeDD").open = !!S().tradeOpen;
   favSummary(); renderTrade();
 }
 function favSummary() {
-  const items = starred();
+  const items = ALL.filter(it => (state.stars[it.id] || (it.grp && state.stars[it.grp])) && counts(it));
   let tot = 0, got = 0, ready = 0;
-  items.filter(active).forEach(it => { const { n, g } = progress(it); tot += n; got += g; if (n && g === n) ready++; });
+  items.filter(active).forEach(it => { const { n, g } = progress(it); tot += n; got += g; if (readyToBuild(it)) ready++; });
   $("#favSum").textContent = `${got} / ${tot}`;
   $("#favBar").style.width = (tot ? 100 * got / tot : 0) + "%";
-  $("#favSub").textContent = `${items.length} starred · ${ready} ready to build`;
+  $("#favSub").textContent = `${favEntries(ALL).length} starred · ${ready} ready to build`;
+}
+/* ---------- TRADE MESSAGE BUILDER ---------- */
+const tb = { mode: "WTB", list: [] }; // list of [name, count]
+const tradeNames = () => DATA.trade || [];
+function properName(raw) {
+  const q = raw.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\s+/g, " ");
+  if (!q) return null;
+  const names = tradeNames();
+  return names.find(n => n.toLowerCase() === q) || names.find(n => n.toLowerCase().startsWith(q)) || names.find(n => n.toLowerCase().includes(q)) || null;
+}
+function splitMsgs(prefix, tokens) {
+  const msgs = []; let cur = [];
+  const wrap = list => `${prefix} ${list.join(" ")}`;
+  tokens.forEach(t => { if (cur.length && wrap([...cur, t]).length > TRADE_LIMIT) { msgs.push(wrap(cur)); cur = [t]; } else cur.push(t); });
+  if (cur.length) msgs.push(wrap(cur));
+  return msgs;
+}
+const msgListHTML = msgs => `<div class="tlist">${msgs.map((t, i) => `<div class="tmsg"><span class="num">${i + 1}</span>
+  <code>${esc(t)}<span class="len">${t.length} characters</span></code><button class="chip" data-copy="${esc(t)}">Copy</button></div>`).join("")}</div>`;
+function renderBuilder() {
+  if (!$("#tbOut")) return;
+  document.querySelectorAll("[data-tbmode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.tbmode === tb.mode));
+  $("#tbChips").innerHTML = tb.list.map(([n, c], i) => `<span class="tbchip">[${esc(n)}]${c > 1 ? ` x${c}` : ""}<button data-tbdel="${i}" aria-label="Remove ${esc(n)}">×</button></span>`).join("");
+  $("#tbOut").innerHTML = tb.list.length ? msgListHTML(splitMsgs(tb.mode, tb.list.map(([n, c]) => c > 1 ? `[${n}] x${c}` : `[${n}]`))) : "";
+}
+function bindTradeBuilder() {
+  const inp = $("#tbIn");
+  inp.addEventListener("input", () => { // a few quiet suggestions, only once you've typed a little
+    const q = inp.value.trim().toLowerCase();
+    $("#tbList").innerHTML = q.length < 2 ? "" : tradeNames().filter(n => n.toLowerCase().includes(q)).sort((a, b) => a.toLowerCase().indexOf(q) - b.toLowerCase().indexOf(q) || a.length - b.length).slice(0, 6).map(n => `<option value="${esc(n)}"></option>`).join("");
+  });
+  const add = () => {
+    const n = properName(inp.value);
+    if (!n) { say($("#tbAdd"), inp.value.trim() ? "No tradable item by that name" : "Type an item first"); return; }
+    const e = tb.list.find(x => x[0] === n); if (e) e[1]++; else tb.list.push([n, 1]);
+    inp.value = ""; $("#tbList").innerHTML = ""; renderBuilder();
+  };
+  $("#tbAdd").addEventListener("click", add);
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+  $("#tbMode").addEventListener("click", e => { const b = e.target.closest("[data-tbmode]"); if (!b) return; tb.mode = b.dataset.tbmode; renderBuilder(); });
+  $("#tbChips").addEventListener("click", e => { const b = e.target.closest("[data-tbdel]"); if (!b) return; tb.list.splice(+b.dataset.tbdel, 1); renderBuilder(); });
+  renderBuilder();
 }
 function tradeMessages() {
   const m = new Map();
@@ -572,18 +762,21 @@ function tradeMessages() {
 }
 function renderTrade() {
   const msgs = tradeMessages();
-  $("#trade").innerHTML = msgs.length ? `<div class="tlist">${msgs.map((t, i) => `<div class="tmsg"><span class="num">${i + 1}</span>
-      <code>${esc(t)}<span class="len">${t.length} characters</span></code><button class="chip" data-copy="${esc(t)}">Copy</button></div>`).join("")}</div>`
-    : `<p class="empty">${starred().length ? "Nothing missing on your starred items." : "Star some items and their missing parts show up here."}</p>`;
+  if ($("#tradeCnt")) $("#tradeCnt").textContent = msgs.length;
+  $("#trade").innerHTML = msgs.length ? msgListHTML(msgs)
+    : `<p class="empty">${starred().length ? "Nothing missing on your starred Primes." : "Star some Primes and their missing parts show up here."}</p>`;
 }
 
 /* ---------- PAGE: RELIC RUNS ---------- */
 let runsTier = "all";
 function buildRuns() {
   $("#runs").innerHTML = `<header><h1>Relic Runs</h1><p>Check this during a relic mission. Tick a part anywhere and it drops off this page. Pull down to refresh.</p></header>
-    <div class="controls fisstoggle" id="fissMode"><button class="chip" data-fmode="normal">Normal</button><button class="chip" data-fmode="sp">Steel Path</button><span class="ctlk" style="margin-left:4px">fissures</span></div>
     <div id="runsBody"></div>
     <footer>Drop chance per refinement: Common 25.33% Intact → 16.67% Radiant · Uncommon 11% → 20% · Rare 2% → 10%. Vaulted relics can be traded with other players, or bought from Varzia when they're in Prime Resurgence.</footer>`;
+}
+/* Relic Runs sections are dropdowns: closed the first time, then as you left them */
+function runsSec(key, title, note, body) {
+  return `<details class="rot card rsec" data-runs="${key}"${S().runsOpen[key] ? " open" : ""}><summary><span class="rname">${title}</span>${note ? `<em class="rnote">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
 }
 function needMap(items) { // relic -> [{item, full, rar, n}]
   const rm = {};
@@ -600,20 +793,19 @@ function renderRuns() {
   const hvShown = own ? hvAll.filter(([r]) => state.relicCounts[r] > 0) : hvAll;
   const hv = hvShown.filter(([r]) => tierOk(r)).sort((a, b) =>
     new Set(b[1].map(x => x.it)).size - new Set(a[1].map(x => x.it)).size || obtainable(b[0]) - obtainable(a[0]) || relicSort(a[0], b[0]));
-  let h = `<div class="hvpanel${state.hvMin ? " min" : ""}" id="hvPanel"><div class="hvhead" id="hvHead"><h2 class="sec">High value${state.hvMin ? ` · ${hvShown.length}${own ? " owned" : ""}` : ""}</h2>
-    <button class="minbtn" id="hvMin" aria-label="${state.hvMin ? "Expand" : "Minimize"}">${state.hvMin ? "+" : "–"}</button></div><div class="hvbody">
-    <p class="secsub">Relics that hold parts for two or more different starred items.</p>
+  let h = "", body = "";
+  body = `<p class="secsub">Relics that hold parts for two or more different starred items.</p>
     <div class="controls"><button class="chip ghost" id="hvOwned" aria-pressed="${own}">Owned only</button></div>`;
-  h += hv.length ? `<div class="grid hv">` + hv.map(([r, l]) => {
+  body += hv.length ? `<div class="grid hv">` + hv.map(([r, l]) => {
     const n = new Set(l.map(x => x.it)).size;
-    return `<article class="card"><div class="chead" style="cursor:default"><div class="name">${esc(r)}${ownRel(r)}</div>
+    return `<article class="card"><div class="chead" style="cursor:default"><div class="name"><button class="relbtn" data-relic="${esc(r)}">${esc(r)}</button>${ownRel(r)}</div>
       <div class="meta"><span class="tag">${n} starred items</span><span class="st ${stCls(r)}">${statusLabel(r)}</span></div></div>
       <div class="rlist">${l.sort((a, b) => RAR_ORDER[a.rar] - RAR_ORDER[b.rar]).map(p => `<div class="rrow"><span class="pn">${esc(p.full)}</span><span class="rar ${p.rar}">${RAR[p.rar]}</span></div>`).join("")}</div></article>`;
   }).join("") + `</div>` : `<p class="empty">${starItems.length < 2 ? "Star at least two items to find relics that cover more than one."
     : own && !haveCounts ? "Run an Inventory Scan in Settings to see which relics you own."
     : own && hvAll.length ? "None of the relics you own hold parts for more than one of your starred items."
     : "No relic holds parts for more than one of your starred items."}</p>`;
-  h += `</div></div>`;
+  h += runsSec("hv", "High value", `${hvShown.length}${own ? " owned" : ""}`, body);
 
   // Fissures
   const needItems = starItems.length ? starItems : ITEMS.filter(active);
@@ -622,21 +814,25 @@ function renderRuns() {
   Object.keys(nrm).forEach(r => { if (obtainable(r)) needTiers[tierOf(r)] = (needTiers[tierOf(r)] || 0) + 1; });
   const sp = S().fissMode === "sp";
   document.querySelectorAll("#fissMode [data-fmode]").forEach(b => b.setAttribute("aria-pressed", (b.dataset.fmode === "sp") === sp));
-  h += `<h2 class="sec">Void Fissures${sp ? " · Steel Path" : ""}</h2><p class="secsub">Running now. Gold rows match a tier you have farmable relics to crack${starItems.length ? " for your starred items" : ""}.</p>`;
+  body = `<div class="controls fisstoggle" id="fissMode"><button class="chip" data-fmode="normal" aria-pressed="${!sp}">Normal</button><button class="chip" data-fmode="sp" aria-pressed="${sp}">Steel Path</button></div>
+    <p class="secsub">Running now. Gold rows match a tier you have farmable relics to crack${starItems.length ? " for your starred items" : ""}.</p>`;
   const now = Date.now();
   const fiss = (LIVE && LIVE.fissures || []).filter(f => f.expiry > now && !!f.hard === sp)
     .sort((a, b) => (a.storm - b.storm) || (a.hard - b.hard) || (TIER_ORDER[a.tier] ?? 9) - (TIER_ORDER[b.tier] ?? 9) || a.expiry - b.expiry);
-  if (!LIVE) h += `<p class="empty">Live fissures will show once the app can reach the worldstate.</p>`;
-  else if (!fiss.length) h += `<p class="empty">No ${sp ? "Steel Path " : ""}fissures in the feed right now.</p>`;
-  else h += `<div class="fiss">${fiss.map(f => {
+  let fm = 0;
+  if (!LIVE) body += `<p class="empty">Live fissures will show once the app can reach the worldstate.</p>`;
+  else if (!fiss.length) body += `<p class="empty">No ${sp ? "Steel Path " : ""}fissures in the feed right now.</p>`;
+  else body += `<div class="fiss">${fiss.map(f => {
     const match = f.tier === "Omnia" ? Object.keys(needTiers).length > 0 : !!needTiers[f.tier];
     const cnt = f.tier === "Omnia" ? Object.values(needTiers).reduce((a, b) => a + b, 0) : needTiers[f.tier] || 0;
+    if (match) fm++;
     const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<span class="flag need">${cnt} relic${cnt === 1 ? "" : "s"}</span>` : "");
     return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi"><span class="mt">${esc(f.type)}</span><small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span>${flags ? `<span class="flags">${flags}</span>` : ""}</div>`;
   }).join("")}</div>`;
+  h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} for you` : ""}` : "", body);
 
   // Everything missing
-  h += `<h2 class="sec">Every missing part</h2><p class="secsub">All relics for every part you still need, across every item you haven't mastered. Gold outline = also in High value. Teal outline = you can get it right now.</p>
+  body = `<p class="secsub">All relics for every part you still need, across every Prime you haven't mastered. Gold outline = also in High value. Teal outline = you can get it right now.</p>
     <section class="summary" style="margin-top:0"><div class="sumrow"><span>Relics holding a part you need</span><b id="runSum">0</b></div><div class="sumsub" id="runSub"></div>
       <div class="controls">${[["all", "All tiers"], ["Lith", "Lith"], ["Meso", "Meso"], ["Neo", "Neo"], ["Axi", "Axi"]].map(([k, l]) =>
         `<button class="chip" data-tier="${k}" aria-pressed="${k === runsTier}">${l}</button>`).join("")}</div></section>`;
@@ -649,23 +845,23 @@ function renderRuns() {
     ms.forEach(p => {
       const rs = p.r.filter(([r]) => tierOk(r)).sort((a, b) => RAR_ORDER[b[1]] - RAR_ORDER[a[1]] || relicSort(a[0], b[0]));
       c += `<div class="part"><b>${esc(p.full)}</b>${p.n > 1 ? `<span class="need">need ${p.n}</span>` : ""}<div class="chips">` +
-        rs.map(([r, rar]) => `<span class="rchip ${rar}${hvSet.has(r) ? " hot" : ""}${obtainable(r) ? " av" : ""}">${esc(r)}<i>${rar}</i>${ownRel(r)}</span>`).join("") + `</div></div>`;
+        rs.map(([r, rar]) => `<button class="rchip ${rar}${hvSet.has(r) ? " hot" : ""}${obtainable(r) ? " av" : ""}" data-relic="${esc(r)}">${esc(r)}<i>${rar}</i>${ownRel(r)}</button>`).join("") + `</div></div>`;
     });
     cards.push((state.stars[it.id] ? "0" : "1") + it.n + "\u0000" + c + `</article>`);
   });
   cards.sort();
-  h += cards.length ? `<div class="grid">${cards.map(s => s.split("\u0000")[1]).join("")}</div>` : `<p class="empty">Nothing missing in this tier.</p>`;
+  body += cards.length ? `<div class="grid">${cards.map(s => s.split("\u0000")[1]).join("")}</div>` : `<p class="empty">Nothing missing in this tier.</p>`;
+  h += runsSec("miss", "Every missing part", `${Object.keys(allRm).length} relics`, body);
   $("#runsBody").innerHTML = h;
   $("#runSum").textContent = Object.keys(allRm).length;
   $("#runSub").textContent = `${new Set(Object.values(allRm).flat().map(x => x.full)).size} different parts missing across ${ITEMS.filter(active).length} items · ${hvSet.size} high-value relic${hvSet.size === 1 ? "" : "s"}`;
-  $("#hvHead").addEventListener("click", () => { state.hvMin = !state.hvMin; save(); renderRuns(); });
   $("#hvOwned").addEventListener("click", () => { state.hvOwned = !state.hvOwned; save(); renderRuns(); });
 }
 
 /* ---------- PAGE: ROTATING ---------- */
-const rotOpen = new Set(); // which Rotating dropdowns are open (they start closed)
-function rotSection(key, title, note, body) {
-  return `<details class="rot card" data-rot="${key}"${rotOpen.has(key) ? " open" : ""}><summary><span class="rname">${title}</span>${note ? `<em class="rnote">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
+function rotSection(key, title, note, body) { // closed the first time, then as you left it
+  if (S().hideVend[key]) return "";
+  return `<details class="rot card" data-rot="${key}"${S().rotOpen[key] ? " open" : ""}><summary><span class="rname">${title}</span>${note ? `<em class="rnote">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
 }
 function nextWeeklyReset(now = new Date()) {
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -711,54 +907,72 @@ function renderRotating() {
 }
 
 /* ---------- UPDATED LINE ---------- */
-function renderUpdated() {
-  let s = "";
-  if (DATA_SRC === "none") s = "Loading relic data…";
-  else if (DATA.seed) s = "Starter data · full Prime list comes with the first update";
-  else s = `Relic data updated ${ago(DATA_AT)}`;
-  if (DATA_OFFLINE && DATA_SRC !== "none") s += ` · <span class="off">offline</span>`;
-  if (LIVE) s += ` · Live ${ago(LIVE_AT)}${LIVE_OFFLINE ? ` <span class="off">(saved)</span>` : ""}`;
-  $("#updated").innerHTML = s;
+function renderUpdated() { // short: "Updated 18 h ago" with a dot that turns amber when offline
+  const off = (DATA_OFFLINE && DATA_SRC !== "none") || LIVE_OFFLINE;
+  let s;
+  if (DATA_SRC === "none") s = "Loading…";
+  else if (DATA.seed) s = "Starter data";
+  else s = `Updated ${ago(Math.max(DATA_AT, LIVE ? LIVE_AT : 0))}`;
+  $("#updated").innerHTML = `<span class="sdot${off ? " off" : ""}" role="img" aria-label="${off ? "Offline" : "Online"}"></span>${s}${off ? ` <span class="off">offline</span>` : ""}`;
 }
 
 /* ---------- DRAWER ---------- */
 function renderDrawer() {
   const st = S(), sd = specialDay();
   const sw = (k, l) => `<label class="tgl"><span>${l}</span><input type="checkbox" data-show="${k}"${st.show[k] ? " checked" : ""}></label>`;
+  const vend = ([k, l]) => `<label class="tgl"><span>${l}</span><input type="checkbox" data-vend="${k}"${st.hideVend[k] ? "" : " checked"}></label>`;
   $("#drawer").innerHTML = `<h2>Settings</h2>
-    <details class="dsec"><summary>Theme</summary><div class="dbody">
+    <details class="dsec"><summary>Appearance</summary><div class="dbody">
+      <h4>Theme</h4>
       ${sd ? `<div class="sdnote">${esc(sd.label)} theme is on today. Your theme comes back tomorrow.</div>` : ""}
       <div class="themes">${THEMES.map(([k, l, sw]) => `<button class="themebtn" data-theme-set="${k}" aria-pressed="${st.theme === k}"><span class="sw">${sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>${l}</button>`).join("")}${hiddenThemeRows()}</div>
+      <h4>Display</h4>
+      <div class="drow"><label for="tsize">Text size</label><input id="tsize" type="range" min="85" max="130" step="5" value="${st.textSize}"><output id="tsizeOut">${st.textSize}%</output></div>
+      <label class="tgl"><span>Compact cards</span><input type="checkbox" data-disp="compact"${st.compact ? " checked" : ""}></label>
+      <label class="tgl"><span>Reduce motion</span><input type="checkbox" data-disp="reduceMotion"${st.reduceMotion ? " checked" : ""}></label>
     </div></details>
-    <details class="dsec"><summary>Info shown</summary><div class="dbody">
+    <details class="dsec"><summary>Accessibility</summary><div class="dbody">
+      <h4>Info shown</h4>
       ${SHOW_SWITCHES.map(([k, l]) => sw(k, l)).join("")}
       <p class="always">Always shown: current fissures, relic rarity badges and Incarnon info. Variant info always shows inside the Incarnon &amp; variants dropdown. Oracle text is the explanations under page titles and at the bottom of pages.</p>
+      <h4>Rotating vendors</h4>
+      ${VENDORS.map(vend).join("")}
+      <h4>Best farm source</h4>
+      <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
+      <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
     </div></details>
-    <h3>Display</h3>
-    <label class="tgl"><span>Reduce motion</span><input type="checkbox" data-disp="reduceMotion"${st.reduceMotion ? " checked" : ""}></label>
-    <label class="tgl"><span>Compact cards</span><input type="checkbox" data-disp="compact"${st.compact ? " checked" : ""}></label>
-    <div class="drow"><label for="tsize">Text size</label><input id="tsize" type="range" min="85" max="130" step="5" value="${st.textSize}"><output id="tsizeOut">${st.textSize}%</output></div>
-    ${soundRow()}
-    <div class="drow"><label for="startSel">Start page</label><select id="startSel" class="dsel">${START_PAGES.map(([v, l]) => `<option value="${v}"${+st.startPage === v ? " selected" : ""}>${l}</option>`).join("")}</select></div>
-    <h3>Best farm source</h3>
-    <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
-    <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
-    <h3>Inventory Scan</h3>
-    <p class="dnote">Upload a screen recording to update your relics and Prime parts.</p>
-    ${[["relics", "Relics"], ["parts", "Prime parts"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
-    <div class="controls"><button class="chip ghost" id="invBtn">View inventory</button></div>
-    <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
+    <details class="dsec"><summary>Import Data</summary><div class="dbody">
+      <h4>Inventory Scan</h4>
+      <p class="dnote">Upload a screen recording to update your relics and parts.</p>
+      ${[["relics", "Relics"], ["parts", "Parts"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
+      <div class="controls"><button class="chip ghost" id="invBtn">View inventory</button></div>
+      <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
+    </div></details>
     <div class="spacer"></div>
     <h3>Enter code</h3>
     <div class="codebox"><input id="codeIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code"><button class="chip" id="codeBtn">Unlock</button></div>
     <div class="codemsg" id="codeMsg" role="status"></div>
-    <div class="backup"><h3>Backup / restore code</h3>
-      <div class="controls"><button class="chip" id="bkCopy">Copy backup code</button></div>
+    ${soundRow()}
+    <div class="drow"><label for="startSel">Start page</label><select id="startSel" class="dsel">${START_PAGES.map(([v, l]) => `<option value="${v}"${+st.startPage === v ? " selected" : ""}>${l}</option>`).join("")}</select></div>
+    <div class="backup"><h3>Backup / restore</h3>
+      <div class="controls"><button class="chip" id="bkCopy">Copy backup code</button><button class="chip" id="bkSave">Save backup file</button></div>
       <textarea id="bkIn" placeholder="Paste a backup code here to restore" spellcheck="false"></textarea>
-      <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><span class="toast" data-toast></span></div>
+      <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><label class="chip ghost filechip">Restore from file<input type="file" accept=".txt,text/plain" id="bkFile" hidden></label><span class="toast" data-toast></span></div>
       <div class="controls"><button class="chip danger" id="clearBtn">Clear data</button></div>
       <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
     <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
+}
+const VENDORS = [["baro", "Void Trader"], ["darvo", "Darvo"], ["teshin", "Teshin (Steel Path Honors)"], ["circuit", "Steel Path Circuit"], ["varzia", "Varzia"]];
+async function saveBackupFile(btn) {
+  const code = await makeBackup(), name = `relic-companion-backup-${new Date().toISOString().slice(0, 10)}.txt`;
+  if (native && native.saveFile) {
+    window.__wrcSaved = ok => say(btn, ok ? "Backup file saved" : "Not saved");
+    native.saveFile(name, code); return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([code], { type: "text/plain" })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  say(btn, "Backup file saved");
 }
 const SCAN_UI = { busy: false, msg: "", bad: false }; // shared with inventory.js
 function scanSay(msg, bad, busy) {
@@ -773,7 +987,7 @@ let invTab = "relics";
 function showInventory() {
   $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card invbox"><div class="chead" style="cursor:default"><div class="name">Inventory</div>
     <div class="meta"><span class="tag">From Inventory Scan</span></div></div>
-    <div class="mbody"><div class="controls" id="invTabs"><button class="chip" data-inv="relics">Relics</button><button class="chip" data-inv="parts">Prime parts</button></div>
+    <div class="mbody"><div class="controls" id="invTabs"><button class="chip" data-inv="relics">Relics</button><button class="chip" data-inv="parts">Parts</button></div>
     <input class="search" id="invQ" type="search" placeholder="Search" autocomplete="off">
     <div class="invsum" id="invSum"></div><div class="invlist" id="invList"></div></div>
     <button class="builtbtn" data-close>Done</button></article></div>`;
@@ -785,7 +999,7 @@ function showInventory() {
     const at = state.scanAt[invTab], file = state.scanFiles[invTab];
     const total = all.reduce((a, [, n]) => a + n, 0);
     $("#invSum").innerHTML = all.length ? `${all.length} ${isR ? "relic" : "part"}${all.length === 1 ? "" : "s"} · ${total} in total${file ? `<br><span class="sub" style="margin:0">${esc(file)}${at ? `, scanned ${ago(at)}` : ""}</span>` : ""}` : "";
-    if (!all.length) { $("#invList").innerHTML = `<p class="empty">Nothing imported yet. Upload a recording of your ${isR ? "relics" : "Prime parts"} under Inventory Scan in Settings.</p>`; return; }
+    if (!all.length) { $("#invList").innerHTML = `<p class="empty">Nothing imported yet. Upload a recording of your ${isR ? "relics" : "parts"} under Import Data in Settings.</p>`; return; }
     if (!rows.length) { $("#invList").innerHTML = `<p class="empty">Nothing matches that search.</p>`; return; }
     let h = "", grp = null;
     rows.forEach(([k, n]) => {
@@ -991,10 +1205,44 @@ async function copyText(t) {
   } catch (e) { return false; }
 }
 function say(el, msg) {
-  const host = el && el.closest(".backup, .summary");
+  const host = el && el.closest(".backup, .summary, .tdd");
   const t = host && host.querySelector("[data-toast]");
   if (!t) return;
   t.textContent = msg; clearTimeout(t._t); t._t = setTimeout(() => { t.textContent = ""; }, 2500);
+}
+
+/* ---------- UNDO ----------
+   Mastered, Building and scan changes show a small Undo bar for a few seconds. */
+const snapState = () => JSON.stringify({ t: state.ticks, m: state.mastered, b: state.building, bl: state.built });
+function offerUndo(msg, snap) {
+  let bar = $("#undoBar");
+  if (!bar) { bar = document.createElement("div"); bar.id = "undoBar"; bar.className = "undobar"; bar.setAttribute("role", "status"); document.body.appendChild(bar); }
+  bar.innerHTML = `<span>${esc(msg)}</span><button class="linkbtn" id="undoBtn">Undo</button>`;
+  bar.classList.add("show");
+  clearTimeout(bar._t); bar._t = setTimeout(() => bar.classList.remove("show"), 5000);
+  $("#undoBtn").onclick = () => {
+    const o = JSON.parse(snap);
+    Object.assign(state, { ticks: o.t, mastered: o.m, building: o.b, built: o.bl });
+    save(); renderAll(); bar.classList.remove("show");
+  };
+}
+window.offerUndo = offerUndo; window.snapState = snapState;
+
+/* ---------- RELIC QUICK CARD ---------- */
+function showRelic(r) {
+  const own = (state.relicCounts || {})[r] || 0, rows = [];
+  ITEMS.forEach(it => (it.parts || []).forEach(p => (p.r || []).forEach(([rn, rar]) => {
+    if (rn !== r) return;
+    const need = active(it) && unitsOf(it).some(u => u.full === p.full && !isTicked(u) && !u.whole);
+    rows.push({ full: p.full, rar, need });
+  })));
+  rows.sort((a, b) => b.need - a.need || RAR_ORDER[a.rar] - RAR_ORDER[b.rar] || a.full.localeCompare(b.full));
+  const st = relicStatus(r);
+  $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card relcard"><div class="chead" style="cursor:default"><div class="ctop"><div class="name">${esc(r)}</div></div>
+    <div class="meta"><span class="st ${stCls(r)}">${statusLabel(r)}</span><span class="cnt">${own ? `You have ${own}` : Object.keys(state.relicCounts || {}).length ? "None in your last scan" : ""}</span></div></div>
+    <div class="mbody">${obtainable(r) && st !== "ba" ? `<div class="part"><b>Where to farm</b>${farmHTML(r)}</div>` : st === "ba" ? `<p>Baro Ki'Teer is selling this relic right now.</p>` : `<p>This relic is vaulted. You can trade for it, or buy it from Varzia when it's in Prime Resurgence.</p>`}
+      <div class="part"><b>What's inside</b>${rows.map(x => `<div class="rrow"><span class="pn">${esc(x.full)}${x.need ? ` <span class="need">you need this</span>` : ""}</span><span class="rar ${x.rar}">${RAR[x.rar]}</span></div>`).join("") || `<p class="secsub">No part list for this relic.</p>`}</div></div>
+    <button class="builtbtn" data-close>Close</button></article></div>`;
 }
 
 /* ---------- MODAL (Vault Watch) ---------- */
@@ -1012,21 +1260,22 @@ const closeModal = () => { $("#modalRoot").innerHTML = ""; const f = modalOnClos
 
 /* ---------- TOUR + WHAT'S NEW ---------- */
 const TOUR = [
-  ["Welcome to Relic Companion", "Track every Prime part you still need, which relics drop them, and where to farm those relics."],
-  ["Four pages", "Swipe left and right, or tap the tabs: <b>Rotating</b> (vendors and weekly rewards), <b>Relic Runs</b> (what to crack and live fissures), <b>Favorites</b> and <b>Main</b> (every Prime)."],
+  ["Welcome to Relic Companion", "Track everything that counts toward mastery: the parts you still need, which relics drop them, and where to farm them."],
+  ["Four pages", "Swipe left and right, or tap the tabs: <b>Rotating</b> (vendors and weekly rewards), <b>Relic Runs</b> (what to crack and live fissures), <b>Favorites</b> and <b>Main</b> (everything that gives mastery, in Base and Prime)."],
   ["Star, tick, tap", "Tap ☆ to add an item to Favorites. Tick parts as you get them. Tap an item's name for its relics, best farms and other info."],
   ["Two side panels", "Swipe in from the left edge, or tap the menu button, for <b>Settings</b>. Swipe in from the right edge, or tap the checklist button, for your <b>daily and weekly checklist</b>."],
-  ["Keep your progress safe", "Ticks are saved on this phone. Use <b>Copy backup code</b> in Settings to move them to a new phone. To see this tour again, tap the <b>?</b> at the bottom of the Settings menu."],
+  ["Keep your progress safe", "Ticks are saved on this phone. Use <b>Save backup file</b> or <b>Copy backup code</b> in Settings to move them to a new phone. To see this tour again, tap the <b>?</b> at the bottom of the Settings menu."],
 ];
 /* Update WHATS_NEW with each APK release: friends see it once after updating. */
 const WHATS_NEW = {
-  id: "2026-11-b",
+  id: "2026-11-c",
   items: [
-    "Inventory Scan in Settings: upload a recording of your relics or Prime parts and the app reads them. Relic counts show next to each relic, and View inventory lists everything it found.",
-    "High value on Relic Runs gets an Owned only switch.",
-    "Foundry tracker: items with every part move to the top of Main as Ready to build. Tap Building to start a countdown, and the app tells you when it's ready to claim.",
-    "Clear data in Settings, for wiping just the parts you choose.",
-    "Tidier fissure rows, a solid top bar, and cleaner How to get text.",
+    "Main now covers everything that gives mastery. Base holds the regular versions, with variants like MK1 and Vandal in one card; Prime holds every Prime set. Each shows how many you've mastered.",
+    "New categories: Vehicles, Arch-weapons, Modular weapons, Modular companions, Amps (with Sirocco) and Tauron Strikes.",
+    "The search bar, category picker and a filter button stay pinned as you scroll. A ↑ button takes you back to the top.",
+    "Favorites gets Base and Prime sections, sorting, and Trade chat shortcuts with a message builder.",
+    "Tap any relic name for where to farm it and what's inside. Relic Runs and Rotating sections are dropdowns that remember how you left them.",
+    "Settings are grouped into Appearance, Accessibility and Import Data. Save your backup as a file, hide Rotating vendors you don't use, and undo Mastered or scan changes.",
   ],
 };
 function showTour() {
@@ -1097,7 +1346,15 @@ function queueDerived() { // after a tick: refresh lists that depend on missing 
 /* ---------- EVENTS ---------- */
 function bindEvents() {
   const pages = $("#pages");
+  pages.addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.mgrp")) fillMg(e.target); }, true);
   pages.addEventListener("change", e => {
+    const mid = e.target.dataset.m;
+    if (mid) { // a modular piece: its tick is Mastered
+      const snap = snapState(), it = BYID[mid];
+      if (e.target.checked) { state.mastered[mid] = 1; blinkBuddy(); } else delete state.mastered[mid];
+      save(); refreshCards(mid); queueDerived();
+      offerUndo(`${it ? it.n : "Item"} ${e.target.checked ? "marked mastered" : "unmarked"}`, snap); return;
+    }
     const u = e.target.dataset.u; if (!u) return;
     const id = e.target.dataset.it, it = BYID[id], was = it && readyToBuild(it), hadB = !!(state.building[id] || state.built[id]);
     if (e.target.checked) { state.ticks[u] = 1; blinkBuddy(); } else { delete state.ticks[u]; clearBuild(id); }
@@ -1117,32 +1374,40 @@ function bindEvents() {
     }
     const vw = t.closest("[data-vw]");
     if (vw) { openVault(vw.dataset.vw); return; }
+    const rb = t.closest("[data-relic]");
+    if (rb) { showRelic(rb.dataset.relic); return; }
+    const jp = t.closest("[data-jump]");
+    if (jp) { jumpTo(jp.dataset.jump); return; }
     const m = t.closest("[data-mastered]");
     if (m) {
-      const id = m.dataset.mastered;
-      if (state.mastered[id]) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); }
+      const id = m.dataset.mastered, snap = snapState(), it = BYID[id];
+      const on = !state.mastered[id];
+      if (!on) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); }
       save(); renderMain(); renderFavs(); renderRuns();
+      offerUndo(`${it ? it.n : "Item"} ${on ? "marked mastered" : "unmarked"}`, snap);
       return;
     }
     const bb = t.closest("[data-build]");
     if (bb) {
       const it = BYID[bb.dataset.build]; if (!it) return;
+      const snap = snapState();
       state.building[it.id] = { e: Date.now() + buildHours(it) * 3600e3, n: it.n };
       save(); renderMain(); renderFavs();
+      offerUndo(`${it.n} is building`, snap);
       return;
     }
     const ex = t.closest("[data-exp]");
     if (ex && !t.closest("button.star, .vw")) {
-      const id = ex.dataset.exp;
-      if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
-      document.querySelectorAll(`.card[data-item="${id}"]`).forEach(card => {
-        const open = expanded.has(id);
+      const id = ex.dataset.exp, opening = !expanded.has(id);
+      const was = [...expanded];
+      expanded.clear(); if (opening) expanded.add(id); // one open card at a time keeps the list short
+      new Set([...was, id]).forEach(x => document.querySelectorAll(`.card[data-item="${x}"]`).forEach(card => {
+        const open = expanded.has(x), more = card.querySelector(".more"); if (!more) return;
         card.classList.toggle("open", open);
-        const more = card.querySelector(".more");
         more.classList.toggle("hidden", !open);
-        more.innerHTML = open ? moreHTML(BYID[id]) : "";
-        card.querySelector(".expbtn").textContent = open ? "Hide info ▴" : "Relics & info ▾";
-      });
+        more.innerHTML = open ? moreHTML(BYID[x]) : "";
+        card.querySelector(".expbtn").textContent = expLabel(BYID[x]);
+      }));
       return;
     }
     const tier = t.closest("[data-tier]");
@@ -1161,7 +1426,11 @@ function bindEvents() {
   });
   $("#rotating").addEventListener("toggle", e => {
     const d = e.target; if (!d.matches || !d.matches("details.rot")) return;
-    if (d.open) rotOpen.add(d.dataset.rot); else rotOpen.delete(d.dataset.rot);
+    S().rotOpen[d.dataset.rot] = d.open ? 1 : 0; save();
+  }, true);
+  $("#runs").addEventListener("toggle", e => {
+    const d = e.target; if (!d.matches || !d.matches("details.rsec")) return;
+    S().runsOpen[d.dataset.runs] = d.open ? 1 : 0; save();
   }, true);
   $("#tabs").addEventListener("click", e => { const a = e.target.closest("[data-page]"); if (a) goPage(+a.dataset.page, true); });
   $("#menuBtn").addEventListener("click", () => setDrawer(true));
@@ -1194,6 +1463,7 @@ function bindEvents() {
       const code = await makeBackup(); const ok = await copyText(code);
       $("#bkIn").value = code; say(e.target, ok ? "Backup code copied" : "Copy blocked: the code is in the box below"); return;
     }
+    if (e.target.id === "bkSave") { saveBackupFile(e.target); return; }
     if (e.target.id === "bkRestore") {
       const btn = e.target;
       let next;
@@ -1206,6 +1476,12 @@ function bindEvents() {
     const t = e.target;
     if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
     if (t.dataset.disp) { S()[t.dataset.disp] = t.checked; save(); applyDisplay(); return; }
+    if (t.dataset.vend) { if (t.checked) delete S().hideVend[t.dataset.vend]; else S().hideVend[t.dataset.vend] = 1; save(); renderRotating(); return; }
+    if (t.id === "bkFile" && t.files && t.files[0]) {
+      const f = t.files[0]; t.value = "";
+      f.text().then(txt => { $("#bkIn").value = txt.trim(); say($("#bkRestore"), "Loaded. Tap Restore to use it"); });
+      return;
+    }
     if (t.id === "startSel") { S().startPage = +t.value; save(); }
     if (t.dataset.scan && t.files && t.files[0]) { const f = t.files[0]; t.value = ""; if (window.runScan) window.runScan(t.dataset.scan, f); }
   });
@@ -1219,13 +1495,24 @@ function bindEvents() {
 function renderOpenCards() { expanded.forEach(id => refreshCards(id)); }
 
 /* ---------- PAGES (swipe) ---------- */
+/* A floating up-arrow once you've scrolled a long way down a page */
+function bindUpArrow() {
+  const b = document.createElement("button");
+  b.id = "upBtn"; b.className = "upbtn"; b.setAttribute("aria-label", "Back to top"); b.innerHTML = "↑";
+  document.body.appendChild(b);
+  const cur = () => document.querySelectorAll(".page")[page];
+  const check = () => { const p = cur(); b.classList.toggle("show", !!p && p.scrollTop > 900 && !drawerOpen && !weeklyOpen); };
+  document.querySelectorAll(".page").forEach(p => p.addEventListener("scroll", check, { passive: true }));
+  b.addEventListener("click", () => { const p = cur(); if (p) p.scrollTo({ top: 0, behavior: S().reduceMotion ? "auto" : "smooth" }); });
+  window.__upCheck = check;
+}
 let page = PAGE_MAIN; // replaced by the start page setting at launch
 function goPage(i, smooth) {
   const p = $("#pages");
   p.scrollTo({ left: i * p.clientWidth, behavior: smooth ? "smooth" : "auto" });
   setTab(i);
 }
-function setTab(i) { page = i; document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", +a.dataset.page === i)); checkBaro(); }
+function setTab(i) { page = i; if (window.__upCheck) window.__upCheck(); document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", +a.dataset.page === i)); checkBaro(); }
 function bindPages() {
   const p = $("#pages"); let raf = 0;
   p.addEventListener("scroll", () => {
@@ -1369,6 +1656,13 @@ function renderWeekly() {
       <button class="wadd" data-wadd="${sec}" aria-label="Add a ${sec} item">+</button></section>`;
   };
   $("#weekly").innerHTML = `<h2>Checklist</h2>${section("daily")}${section("weekly")}`;
+  checklistDot();
+}
+/* A small dot on the checklist button while anything for today or this week is left */
+function checklistDot() {
+  const left = ["daily", "weekly"].some(sec => CHECKLIST[sec].flatMap(([, l]) => l).some(([id]) => !wTicked(sec, id))
+    || state.weekly.c.some(x => x.sec === sec && x.text && !wTicked(sec, x.id)));
+  const b = $("#weeklyBtn"); if (b) b.classList.toggle("dot", left);
 }
 function bindWeekly() {
   const wk = $("#weekly");
@@ -1401,7 +1695,8 @@ function bindWeekly() {
     else if (x) checklistSecret(x.text, x.sec);
   });
   wk.addEventListener("keydown", e => { if (e.target.matches(".wtext") && e.key === "Enter") e.target.blur(); });
-  setInterval(() => { if (weeklyOpen && !wk.contains(document.activeElement)) renderWeekly(); }, 60000);
+  setInterval(() => { if (weeklyOpen && !wk.contains(document.activeElement)) renderWeekly(); else checklistDot(); }, 60000);
+  checklistDot();
 }
 
 /* Android back button: close things before leaving the app */
@@ -1545,7 +1840,7 @@ applyTheme();
 trackTopbar();
 runIntro();
 buildMain(); buildFavs(); buildRuns(); renderDrawer();
-bindEvents(); bindPages(); bindDrawerGesture(); bindWeekly(); bindPullRefresh(); startHidden();
+bindEvents(); bindPages(); bindDrawerGesture(); bindWeekly(); bindPullRefresh(); bindUpArrow(); startHidden();
 page = +S().startPage; if (!(page >= 0 && page <= 3)) page = PAGE_MAIN;
 requestAnimationFrame(() => goPage(page, false));
 loadCachedLive();

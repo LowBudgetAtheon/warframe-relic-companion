@@ -56,10 +56,10 @@ jobs:
       - name: Commit it if anything changed
         if: github.event_name != 'pull_request'
         run: |
-          if git diff --quiet -- data/relics.json; then echo "No data changes."; exit 0; fi
+          if git diff --quiet -- data/relics.json data/acquisition.json && [ -z "$(git status --porcelain data/acquisition.json)" ]; then echo "No data changes."; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/relics.json
+          git add data/relics.json data/acquisition.json
           git commit -m "Update relic data"
           git pull --rebase origin main
           git push

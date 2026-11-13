@@ -291,13 +291,19 @@
   async function runScan(kind, file) {
     if (SCAN_UI.busy) return;
     cancelled = false;
-    const label = kind === "relics" ? "relics" : "Prime parts";
+    const label = kind === "relics" ? "relics" : "parts";
     scanSay("Getting ready…", false, true);
     try {
-      if (!ITEMS.length) throw new Error("data");
+      if (!ALL.length) throw new Error("data");
       const w = await getWorker();
       const relIdx = relicIndex(Object.keys(DATA.relics || {}));
-      const names = new Set(); ITEMS.forEach(it => unitsOf(it).forEach(u => { if (!u.whole && u.full) names.add(u.full); }));
+      // Base and Prime parts. A built Base component ("Gauss Neuroptics") sits in the inventory as its blueprint too.
+      const names = new Set(), alias = new Map();
+      ALL.forEach(it => unitsOf(it).forEach(u => {
+        if (u.whole || u.own || !u.full) return;
+        names.add(u.full);
+        if (it.b && !/ Blueprint$/.test(u.full)) { names.add(`${u.full} Blueprint`); alias.set(`${u.full} Blueprint`, u.full); }
+      }));
       const pIdx = partIndex([...names]), cache = new Map();
       const seen = new Map(); // name -> [counts seen in each frame]
       for await (const f of frames(file)) {
@@ -308,7 +314,7 @@
         if (kind === "relics") {
           const list = relicsInFrame(words, relIdx, ownedSampler(f.color));
           settleOrder(list, (a, b) => (tierOf(a) === tierOf(b) ? relicSort(a, b) : 0)).forEach((n, i) => { if (n) frame.set(n, (frame.get(n) || 0) + list[i].n); });
-        } else partsInFrame(words, pIdx, cache).forEach(p => frame.set(p.full, (frame.get(p.full) || 0) + p.n));
+        } else partsInFrame(words, pIdx, cache).forEach(p => { const f = alias.get(p.full) || p.full; frame.set(f, (frame.get(f) || 0) + p.n); });
         frame.forEach((n, k) => (seen.get(k) || seen.set(k, []).get(k)).push(n));
       }
       if (cancelled) { scanSay("Scan cancelled."); return; }
@@ -329,14 +335,15 @@
     renderDrawer(); renderAll();
   }
   function finishParts(result, fname) {
-    if (!result.size) { scanSay("Couldn't read any Prime part names from that video. A clip recorded on the console reads best.", true); return; }
+    if (!result.size) { scanSay("Couldn't read any part names from that video. A clip recorded on the console reads best.", true); return; }
     const left = new Map(result), add = [], rem = [];
     const order = [];
-    ITEMS.forEach(it => {
+    ALL.forEach(it => {
       if (!active(it) || state.building[it.id] || state.built[it.id]) return; // in the Foundry, or built: their parts are used up
-      unitsOf(it).forEach(u => { if (!u.whole) order.push({ it, u }); });
+      unitsOf(it).forEach(u => { if (!u.whole && !u.own) order.push({ it, u }); });
     });
     order.sort((a, b) => (a.u.group ? 1 : 0) - (b.u.group ? 1 : 0)); // an item's own parts first, then ones needed for other weapons
+    const snap = snapState();
     order.forEach(({ it, u }) => {
       const n = left.get(u.full) || 0;
       if (n > 0) { left.set(u.full, n - 1); if (!isTicked(u)) add.push(u); }
@@ -347,6 +354,7 @@
     state.scanFiles.parts = fname; state.scanAt.parts = Date.now(); save();
     scanSay(`Ticked ${add.length} new part${add.length === 1 ? "" : "s"}.${rem.length ? ` ${rem.length} to check.` : ""}`);
     renderDrawer(); renderAll();
+    if (add.length) offerUndo(`Scan ticked ${add.length} part${add.length === 1 ? "" : "s"}`, snap);
     if (rem.length) { setDrawer(false); setTimeout(() => confirmRemovals(rem), 250); }
   }
   function confirmRemovals(rem) {
@@ -355,8 +363,10 @@
       <div class="remlist">${rem.map(({ it, u }, i) => `<label class="tgl"><span>${esc(u.full)}${u.group ? ` <span class="sub" style="margin:0">for ${esc(it.n)}</span>` : u.c > 1 ? ` <span class="sub" style="margin:0">${u.i} of ${u.c}</span>` : ""}</span><input type="checkbox" data-rem="${i}" checked></label>`).join("")}</div></div>
       <div class="tourbtns"><button class="chip ghost" data-close>Keep all</button><button class="chip" id="remGo">Untick selected</button></div></article></div>`;
     $("#remGo").addEventListener("click", () => {
-      document.querySelectorAll("[data-rem]").forEach(c => { if (c.checked) { const { it, u } = rem[+c.dataset.rem]; delete state.ticks[u.id]; clearBuild(it.id); } });
+      const snap = snapState(); let n = 0;
+      document.querySelectorAll("[data-rem]").forEach(c => { if (c.checked) { const { it, u } = rem[+c.dataset.rem]; delete state.ticks[u.id]; clearBuild(it.id); n++; } });
       save(); closeModal(); renderAll();
+      if (n) offerUndo(`Unticked ${n} part${n === 1 ? "" : "s"}`, snap);
     });
   }
 

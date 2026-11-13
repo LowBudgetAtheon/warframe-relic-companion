@@ -232,7 +232,7 @@ function checkInfection() {
   const on = FIRST_FOUR.every(isUnlocked) && !isUnlocked("coda");
   document.body.classList.toggle("infected", on);
   const s = document.getElementById("search");
-  if (s) s.placeholder = on ? "Search Primes or parts \u2592 p\u2592rty \u2592f y\u2592ur l\u2592fet\u2592me \u2592" : "Search Primes or parts";
+  if (s) s.placeholder = on ? "Search \u2592 p\u2592rty \u2592f y\u2592ur l\u2592fet\u2592me \u2592" : "Search";
   clearInterval(infectTimer);
   if (!on) { document.querySelectorAll(".infect").forEach(x => x.remove()); return; }
   const spread = () => {
