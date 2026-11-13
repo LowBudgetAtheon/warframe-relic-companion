@@ -102,23 +102,84 @@ function hookIntroTaps() {
   }, true);
 }
 
-/* ---------- Man in the Wall: leave the app untouched ---------- */
+/* ---------- Man in the Wall: leave the app untouched ----------
+   From 2 minutes untouched, small things start going wrong (touching stops it).
+   At 3 minutes he arrives: ~6 s of slow decay, a hard cut to black, then his
+   theme fades in. Afterwards a faint trace of static shows up now and then. */
 let lastTouch = Date.now();
 ["pointerdown", "touchstart", "keydown", "wheel", "scroll"].forEach(ev => document.addEventListener(ev, () => { lastTouch = Date.now(); }, { capture: true, passive: true }));
 document.addEventListener("visibilitychange", () => { lastTouch = Date.now(); });
+const BUILDUP_MS = 60 * 1000;
+let wallyBusy = false;
 setInterval(() => {
-  if (document.hidden || isUnlocked("wally") || document.getElementById("modal")) return;
-  if (Date.now() - lastTouch > IDLE_MS) wallyArrives();
-}, 5000);
+  if (wallyBusy || document.hidden || isUnlocked("wally") || document.getElementById("modal") || drawerOpen || weeklyOpen) return;
+  const idle = Date.now() - lastTouch;
+  if (idle > IDLE_MS) wallyArrives();
+  else if (idle > IDLE_MS - BUILDUP_MS && Math.random() < 0.3) wrongness();
+}, 1500);
+const visibleIn = sel => [...document.querySelectorAll(sel)].filter(e => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; });
+const pick = list => list[Math.floor(Math.random() * list.length)];
+function wrongness() { // one small, easy-to-miss thing
+  const pages = document.getElementById("pages");
+  const calm = S().reduceMotion;
+  const kind = calm ? 2 : Math.floor(Math.random() * 3);
+  if (kind === 0) pages.animate([{ opacity: 1 }, { opacity: .78 }, { opacity: 1 }], { duration: 110 });
+  if (kind === 1) { const c = pick(visibleIn(".page .card, details.rot")); if (c) c.animate([{ transform: "none" }, { transform: `translate(${Math.random() < .5 ? -3 : 3}px,1px)` }, { transform: "none" }], { duration: 700, easing: "ease-in-out" }); }
+  if (kind === 2) pages.animate([{ filter: "none" }, { filter: "grayscale(.6)" }, { filter: "none" }], { duration: calm ? 1200 : 350 });
+}
+function buzz(pattern) {
+  try { if (native && native.vibrate) { native.vibrate(pattern.join(",")); return; } } catch (e) {}
+  try { navigator.vibrate && navigator.vibrate(pattern); } catch (e) {}
+}
 function wallyArrives() {
-  if (document.querySelector(".wally-take")) return;
+  if (wallyBusy) return;
+  wallyBusy = true;
+  const calm = S().reduceMotion;
+  const pages = document.getElementById("pages");
   const el = document.createElement("div");
-  el.className = "wally-take" + (S().reduceMotion ? " calm" : "");
+  el.className = "wally-take" + (calm ? " calm" : "");
   el.setAttribute("aria-hidden", "true");
   el.innerHTML = `<div class="wt-static"></div><div class="wt-void"></div>`;
   document.body.appendChild(el);
   playSecretSound();
-  setTimeout(() => { unlockHidden("wally"); el.classList.add("gone"); setTimeout(() => el.remove(), 1500); }, 6500);
+  buzz([0, 60, 500, 40, 900, 120, 350, 40, 1300, 180, 600, 60, 220, 300]); // uneven knocking
+  requestAnimationFrame(() => el.classList.add("rising"));
+  const decay = pages.animate([{ filter: "none" }, { filter: "grayscale(1) contrast(1.35) brightness(.7)" }], { duration: 6000, easing: "ease-in", fill: "forwards" });
+  const moved = [];
+  if (!calm) {
+    visibleIn(".page .card, details.rot, header h1, .summary").forEach(c => {
+      moved.push(c.animate([{ transform: "none" }, { transform: `translate(${(Math.random() - .5) * 16}px,${(Math.random() - .3) * 14}px) rotate(${(Math.random() - .5) * 1.6}deg)` }], { duration: 6000, easing: "ease-in", fill: "forwards" }));
+    });
+  }
+  const t0 = Date.now();
+  const jit = calm ? 0 : setInterval(() => { // text twitches, more often as it builds
+    const k = (Date.now() - t0) / 6000;
+    visibleIn(".name, header h1, .sec, li label span, .rname").forEach(t => {
+      if (Math.random() < k * 0.25) t.animate([{ transform: "none" }, { transform: `translate(${(Math.random() - .5) * 4}px,${(Math.random() - .5) * 3}px) skewX(${(Math.random() - .5) * 12}deg)` }, { transform: "none" }], { duration: 90 });
+    });
+  }, 120);
+  setTimeout(() => { // hard cut to black
+    clearInterval(jit);
+    el.classList.add("black");
+    decay.cancel(); moved.forEach(a => a.cancel());
+  }, 6000);
+  setTimeout(() => { unlockHidden("wally"); }, 7000);
+  setTimeout(() => { el.classList.add("gone"); }, 7300);
+  setTimeout(() => { el.remove(); wallyBusy = false; lastTouch = Date.now(); scheduleTrace(); }, 10300);
+}
+let traceTimer = 0;
+function scheduleTrace() { // faint flickers of static long after he's been found
+  clearTimeout(traceTimer);
+  if (!isUnlocked("wally")) return;
+  traceTimer = setTimeout(() => {
+    if (!document.hidden && !S().reduceMotion && !wallyBusy) {
+      const t = document.createElement("div");
+      t.className = "wally-trace"; t.setAttribute("aria-hidden", "true");
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 500);
+    }
+    scheduleTrace();
+  }, (3 + Math.random() * 6) * 60 * 1000);
 }
 function playSecretSound() {
   let src = null;
@@ -195,5 +256,6 @@ function cure() {
 function startHidden() {
   hookIntroTaps();
   checkInfection();
+  scheduleTrace();
   if (!isUnlocked("stalker") && Math.random() < STALKER_CHANCE) setTimeout(() => stalkerTakeover(false), 4000 + Math.random() * 16000);
 }

@@ -13,6 +13,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.view.View;
 import android.view.Window;
 import android.webkit.JavascriptInterface;
@@ -203,6 +205,19 @@ public class MainActivity extends Activity {
                 final String js = "window.__wrcHttp(" + JSONObject.quote(id) + "," + ok + "," + JSONObject.quote(body) + ")";
                 ui.post(() -> web.evaluateJavascript(js, null));
             });
+        }
+
+        /** Plays a vibration pattern: comma-separated off/on times in milliseconds. */
+        @JavascriptInterface
+        public void vibrate(String pattern) {
+            try {
+                String[] parts = pattern.split(",");
+                long[] t = new long[parts.length];
+                for (int i = 0; i < parts.length; i++) t[i] = Long.parseLong(parts[i].trim());
+                Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                if (v != null && v.hasVibrator()) v.vibrate(VibrationEffect.createWaveform(t, -1));
+            } catch (Exception ignored) {
+            }
         }
 
         /** True when the phone is on silent or vibrate, so the secret sound stays quiet. */

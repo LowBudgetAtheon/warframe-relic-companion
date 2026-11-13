@@ -271,16 +271,22 @@ body.reduce-motion .qq{animation-duration:6s !important}
 .stalker-take.gone{opacity:0;transition:opacity .5s}
 @keyframes stin{0%{opacity:0}50%{opacity:1;filter:invert(1)}100%{opacity:1}}
 @keyframes stjit{50%{transform:translate(1px,-1px)}}
-.wally-take{position:fixed;inset:0;z-index:120;pointer-events:none;background:#000;animation:wtin 1.2s ease forwards}
-.wally-take .wt-static{position:absolute;inset:0;opacity:.5;
+.wally-take{position:fixed;inset:0;z-index:120;pointer-events:none;background:#000;opacity:0;transition:opacity 6s ease-in}
+.wally-take.rising{opacity:.55}
+.wally-take .wt-static{position:absolute;inset:0;opacity:.8;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");animation:staticmove .25s steps(4) infinite}
-.wally-take .wt-void{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,rgba(126,242,216,.9),rgba(126,242,216,0) 45%);opacity:0;animation:voidflash 1.1s 1s steps(1) infinite}
-@keyframes voidflash{0%{opacity:0}12%{opacity:.85}18%{opacity:0}46%{opacity:.6}50%{opacity:0}}
-@keyframes wtin{from{opacity:0}to{opacity:1}}
+.wally-take .wt-void{position:absolute;inset:0;background:radial-gradient(circle at 50% 45%,rgba(126,242,216,.9),rgba(126,242,216,0) 45%);opacity:0;animation:voidflash 2.3s 2.5s steps(1) infinite}
+@keyframes voidflash{0%{opacity:0}8%{opacity:.75}11%{opacity:0}63%{opacity:.5}65%{opacity:0}}
+.wally-take.black{transition:none;opacity:1;background:#000}
+.wally-take.black .wt-static,.wally-take.black .wt-void{display:none}
+.wally-take.gone{transition:opacity 3s ease-out;opacity:0}
 .wally-take.calm .wt-static{animation:none}
-.wally-take.calm .wt-void{animation:voidcalm 3s 1s ease-in-out infinite}
-@keyframes voidcalm{50%{opacity:.5}}
-.wally-take.gone{opacity:0;transition:opacity 1.4s}
+.wally-take.calm .wt-void{animation:voidcalm 3s 1.5s ease-in-out infinite}
+@keyframes voidcalm{50%{opacity:.4}}
+.wally-take.calm.black{transition:opacity .8s;opacity:1}
+.wally-trace{position:fixed;inset:0;z-index:119;pointer-events:none;opacity:.1;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");animation:staticmove .2s steps(3) infinite,tracefade .5s ease forwards}
+@keyframes tracefade{0%{opacity:0}20%{opacity:.12}60%{opacity:.05}100%{opacity:0}}
 
 /* Orokin Sale */
 .ocell{position:fixed;top:-50px;z-index:110;width:var(--sz,24px);pointer-events:none;animation:cellfall var(--dur,2.6s) var(--delay,0s) linear forwards}
