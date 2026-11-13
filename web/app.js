@@ -1029,8 +1029,9 @@ function bindEvents() {
       const msg = $("#codeMsg"); msg.className = "codemsg"; msg.textContent = "Checking…";
       const got = await tryCode($("#codeIn").value);
       if (got && got.id) {
-        state.secrets[got.id] = got; save();
+        if (got.type !== "unlock") { state.secrets[got.id] = got; save(); }
         msg.className = "codemsg ok"; msg.textContent = "Secret unlocked!"; $("#codeIn").value = "";
+        if (got.type === "unlock") setTimeout(() => { setDrawer(false); codeUnlock(got); }, 700);
         applyTheme();
       } else { msg.className = "codemsg bad"; msg.textContent = "This code is invalid."; }
       return;
@@ -1243,6 +1244,7 @@ function bindWeekly() {
     const id = e.target.dataset && e.target.dataset.wedit; if (!id) return;
     const x = state.weekly.c.find(c => c.id === id);
     if (x && !x.text.trim()) { state.weekly.c = state.weekly.c.filter(c => c !== x); save(); setTimeout(renderWeekly, 0); }
+    else if (x) checklistSecret(x.text, x.sec);
   });
   wk.addEventListener("keydown", e => { if (e.target.matches(".wtext") && e.key === "Enter") e.target.blur(); });
   setInterval(() => { if (weeklyOpen && !wk.contains(document.activeElement)) renderWeekly(); }, 60000);

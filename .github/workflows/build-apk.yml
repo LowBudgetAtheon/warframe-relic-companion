@@ -76,6 +76,10 @@ jobs:
           npm pack @fontsource/vt323@5 --silent
           mkdir vt && tar xzf fontsource-vt323-*.tgz -C vt
           cp vt/package/files/vt323-latin-400-normal.woff2 "$W/fonts/"
+          # Orokin Sale script lettering
+          npm pack @fontsource/lobster@5 --silent
+          mkdir lb && tar xzf fontsource-lobster-*.tgz -C lb
+          cp lb/package/files/lobster-latin-400-normal.woff2 "$W/fonts/"
           ls -la "$W" "$W/fonts"
 
       - name: Decode the signing key

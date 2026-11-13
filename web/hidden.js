@@ -53,7 +53,8 @@ function secretSearch(raw) {
 }
 
 /* ---------- The Orokin Sale (inside joke) ---------- */
-const CELL_SVG = `<svg viewBox="0 0 24 40" aria-hidden="true"><rect x="5" y="2" width="14" height="36" rx="7" fill="#d9b44a"/><rect x="8" y="9" width="8" height="22" rx="4" fill="#4fd1c5"/><rect x="9.5" y="11" width="2" height="18" rx="1" fill="#cffff5" opacity=".8"/><rect x="5" y="17" width="14" height="2" fill="#8a6a1c"/><rect x="5" y="21" width="14" height="2" fill="#8a6a1c"/></svg>`;
+/* An original pixel-art cell: silver shell, rust bands, slate edging */
+const CELL_SVG = `<svg viewBox="0 0 10 17" shape-rendering="crispEdges" aria-hidden="true"><rect x="4" y="0" width="2" height="1" fill="#1c2433"/><rect x="3" y="1" width="1" height="1" fill="#1c2433"/><rect x="4" y="1" width="2" height="1" fill="#f4f1e6"/><rect x="6" y="1" width="1" height="1" fill="#1c2433"/><rect x="2" y="2" width="1" height="1" fill="#1c2433"/><rect x="3" y="2" width="2" height="1" fill="#f4f1e6"/><rect x="5" y="2" width="2" height="1" fill="#d6d3c6"/><rect x="7" y="2" width="1" height="1" fill="#1c2433"/><rect x="2" y="3" width="1" height="1" fill="#1c2433"/><rect x="3" y="3" width="1" height="1" fill="#f4f1e6"/><rect x="4" y="3" width="2" height="1" fill="#f4f1e6"/><rect x="6" y="3" width="1" height="1" fill="#d6d3c6"/><rect x="7" y="3" width="1" height="1" fill="#1c2433"/><rect x="1" y="4" width="1" height="1" fill="#1c2433"/><rect x="2" y="4" width="2" height="1" fill="#c4512b"/><rect x="4" y="4" width="2" height="1" fill="#c4512b"/><rect x="6" y="4" width="2" height="1" fill="#8e3a20"/><rect x="8" y="4" width="1" height="1" fill="#1c2433"/><rect x="1" y="5" width="1" height="1" fill="#1c2433"/><rect x="2" y="5" width="1" height="1" fill="#f4f1e6"/><rect x="3" y="5" width="3" height="1" fill="#f4f1e6"/><rect x="6" y="5" width="1" height="1" fill="#d6d3c6"/><rect x="7" y="5" width="1" height="1" fill="#a9a7a0"/><rect x="8" y="5" width="1" height="1" fill="#1c2433"/><rect x="1" y="6" width="1" height="1" fill="#1c2433"/><rect x="2" y="6" width="6" height="1" fill="#c4512b"/><rect x="8" y="6" width="1" height="1" fill="#1c2433"/><rect x="1" y="7" width="1" height="1" fill="#1c2433"/><rect x="2" y="7" width="2" height="1" fill="#f4f1e6"/><rect x="4" y="7" width="2" height="1" fill="#f4f1e6"/><rect x="6" y="7" width="1" height="1" fill="#d6d3c6"/><rect x="7" y="7" width="1" height="1" fill="#a9a7a0"/><rect x="8" y="7" width="1" height="1" fill="#1c2433"/><rect x="1" y="8" width="1" height="1" fill="#1c2433"/><rect x="2" y="8" width="1" height="1" fill="#d6d3c6"/><rect x="3" y="8" width="2" height="1" fill="#f4f1e6"/><rect x="5" y="8" width="2" height="1" fill="#d6d3c6"/><rect x="7" y="8" width="1" height="1" fill="#a9a7a0"/><rect x="8" y="8" width="1" height="1" fill="#1c2433"/><rect x="1" y="9" width="1" height="1" fill="#1c2433"/><rect x="2" y="9" width="1" height="1" fill="#5f7387"/><rect x="3" y="9" width="2" height="1" fill="#f4f1e6"/><rect x="5" y="9" width="2" height="1" fill="#d6d3c6"/><rect x="7" y="9" width="1" height="1" fill="#a9a7a0"/><rect x="8" y="9" width="1" height="1" fill="#1c2433"/><rect x="1" y="10" width="1" height="1" fill="#1c2433"/><rect x="2" y="10" width="1" height="1" fill="#5f7387"/><rect x="3" y="10" width="1" height="1" fill="#d6d3c6"/><rect x="4" y="10" width="2" height="1" fill="#f4f1e6"/><rect x="6" y="10" width="1" height="1" fill="#d6d3c6"/><rect x="7" y="10" width="1" height="1" fill="#a9a7a0"/><rect x="8" y="10" width="1" height="1" fill="#1c2433"/><rect x="1" y="11" width="1" height="1" fill="#1c2433"/><rect x="2" y="11" width="1" height="1" fill="#5f7387"/><rect x="3" y="11" width="2" height="1" fill="#d6d3c6"/><rect x="5" y="11" width="1" height="1" fill="#f4f1e6"/><rect x="6" y="11" width="1" height="1" fill="#d6d3c6"/><rect x="7" y="11" width="1" height="1" fill="#a9a7a0"/><rect x="8" y="11" width="1" height="1" fill="#1c2433"/><rect x="2" y="12" width="1" height="1" fill="#1c2433"/><rect x="3" y="12" width="1" height="1" fill="#5f7387"/><rect x="4" y="12" width="2" height="1" fill="#f4f1e6"/><rect x="6" y="12" width="1" height="1" fill="#a9a7a0"/><rect x="7" y="12" width="1" height="1" fill="#1c2433"/><rect x="2" y="13" width="1" height="1" fill="#1c2433"/><rect x="3" y="13" width="1" height="1" fill="#5f7387"/><rect x="4" y="13" width="1" height="1" fill="#d6d3c6"/><rect x="5" y="13" width="1" height="1" fill="#f4f1e6"/><rect x="6" y="13" width="1" height="1" fill="#a9a7a0"/><rect x="7" y="13" width="1" height="1" fill="#1c2433"/><rect x="3" y="14" width="1" height="1" fill="#1c2433"/><rect x="4" y="14" width="1" height="1" fill="#5f7387"/><rect x="5" y="14" width="1" height="1" fill="#d6d3c6"/><rect x="6" y="14" width="1" height="1" fill="#1c2433"/><rect x="3" y="15" width="1" height="1" fill="#1c2433"/><rect x="4" y="15" width="2" height="1" fill="#a9a7a0"/><rect x="6" y="15" width="1" height="1" fill="#1c2433"/><rect x="4" y="16" width="2" height="1" fill="#1c2433"/></svg>`;
 function orokinSale() {
   const calm = S().reduceMotion;
   const n = calm ? 8 : 48;
@@ -65,8 +66,14 @@ function orokinSale() {
     document.body.appendChild(c);
     setTimeout(() => c.remove(), 8000);
   }
-  secretPop("pop-sale", `<span class="sale-big">Orokin Sale!</span>`,
-    `<div class="sale-burst">LIMITED TIME</div><p class="sale-line">Everything must go! Prices slashed across the entire Origin System!</p><p class="sale-fine">*Orokin Cells not included. Offer ends when the Orokin did.</p>`, "Shop now!");
+  document.getElementById("modalRoot").innerHTML = `<div class="modal pop-sale" id="modal"><div class="sale" role="dialog" aria-label="Orokin Sale">
+    <div class="sale-badge"><div class="sale-in">
+      <div class="sale-kicker">Limited time only</div>
+      <div class="sale-big">Orokin Sale!</div>
+      <div class="sale-line">Everything must go, all across the Origin System</div>
+      <button class="sale-btn" data-close>Shop now</button>
+      <div class="sale-fine">*Orokin Cells not included. Offer ends when the Orokin did.</div>
+    </div></div></div></div>`;
 }
 
 /* ---------- Stalker: rare red takeover, or tap the launch logo 5 times ---------- */
@@ -141,7 +148,6 @@ function wallyArrives() {
   el.setAttribute("aria-hidden", "true");
   el.innerHTML = `<div class="wt-static"></div><div class="wt-void"></div>`;
   document.body.appendChild(el);
-  playSecretSound();
   buzz([0, 60, 500, 40, 900, 120, 350, 40, 1300, 180, 600, 60, 220, 300]); // uneven knocking
   requestAnimationFrame(() => el.classList.add("rising"));
   const decay = pages.animate([{ filter: "none" }, { filter: "grayscale(1) contrast(1.35) brightness(.7)" }], { duration: 6000, easing: "ease-in", fill: "forwards" });
@@ -158,8 +164,10 @@ function wallyArrives() {
       if (Math.random() < k * 0.25) t.animate([{ transform: "none" }, { transform: `translate(${(Math.random() - .5) * 4}px,${(Math.random() - .5) * 3}px) skewX(${(Math.random() - .5) * 12}deg)` }, { transform: "none" }], { duration: 90 });
     });
   }, 120);
-  setTimeout(() => { // hard cut to black
+  setTimeout(() => { // hard cut to black: the climax
     clearInterval(jit);
+    playSecretSound();
+    buzz([0, 350]);
     el.classList.add("black");
     decay.cancel(); moved.forEach(a => a.cancel());
   }, 6000);
@@ -194,7 +202,7 @@ function soundRow() {
   return `<div class="drow"><span>Secret sound</span><span class="sndbtns">
     <label class="chip" for="sndIn">${has ? "Change" : "Choose"}</label>${has ? `<button class="chip ghost" id="sndClear">Clear</button>` : ""}
     <input id="sndIn" type="file" accept="audio/*" hidden></span></div>
-    <p class="always">Optional. An audio file from your phone that plays when something hidden happens. It stays on this phone.</p>`;
+    <p class="always">Optional. An audio file from your phone that plays at the peak of something hidden. It stays on this phone.</p>`;
 }
 function bindSoundPicker(dr) {
   dr.addEventListener("change", e => {
@@ -250,6 +258,25 @@ function cure() {
     checkInfection();
     secretPop("pop-coda", "TECHNOCYTE.EXE", `<p>C:\\&gt; party_of_your_lifetime.exe</p><p>Infection contained. A new look has been installed.</p>`, "OK");
   }, 1400);
+}
+
+/* ---------- Backdoors ---------- */
+function checklistSecret(text, sec) { // a daily item called "get money" brings Baro
+  if (sec !== "daily" || isUnlocked("baro")) return;
+  if (String(text).toLowerCase().replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim() !== "get money") return;
+  setTimeout(() => { if (unlockHidden("baro")) secretPop("pop-baro", "A gift from the Void Trader", "<p>Baro Ki'Teer heard you were saving up, and left something gilded behind.</p><p>Baro Ki'Teer theme unlocked.</p>", "Accept"); }, 600);
+}
+function codeUnlock(x) { // from the Enter code box: {type:"unlock", theme:"coda"}
+  if (!x || x.type !== "unlock" || !HIDDEN.some(h => h.id === x.theme)) return false;
+  if (x.theme === "coda") {
+    if (isUnlocked("coda")) return true;
+    if (document.body.classList.contains("infected")) { cure(); return true; }
+    unlockHidden("coda");
+    secretPop("pop-coda", "TECHNOCYTE.EXE", `<p>C:\\&gt; run override</p><p>Access granted. A new look has been installed.</p>`, "OK");
+    return true;
+  }
+  unlockHidden(x.theme);
+  return true;
 }
 
 /* Called once by app.js after it has started */
