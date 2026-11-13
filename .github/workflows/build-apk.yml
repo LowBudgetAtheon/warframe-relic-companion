@@ -80,6 +80,21 @@ jobs:
           npm pack @fontsource/lobster@5 --silent
           mkdir lb && tar xzf fontsource-lobster-*.tgz -C lb
           cp lb/package/files/lobster-latin-400-normal.woff2 "$W/fonts/"
+          # Inventory Scan's on-phone text reader (Tesseract), loaded only when a scan starts
+          T="$W/vendor/tesseract" && mkdir -p "$T"
+          npm pack tesseract.js@5 tesseract.js-core@5 @tesseract.js-data/eng@1 --silent
+          mkdir tj tc td
+          tar xzf tesseract.js-5*.tgz -C tj
+          tar xzf tesseract.js-core-*.tgz -C tc
+          tar xzf tesseract.js-data-eng-*.tgz -C td
+          cp tj/package/dist/tesseract.min.js tj/package/dist/worker.min.js "$T/"
+          # only the LSTM engine is used, so only its builds are needed
+          cp tc/package/tesseract-core*lstm*.wasm.js "$T/" 2>/dev/null || cp tc/package/tesseract-core*.wasm.js "$T/"
+          cp tc/package/tesseract-core*lstm*.wasm "$T/" 2>/dev/null || true
+          ENG=$(find td/package -path '*best_int*' -name 'eng.traineddata.gz' | head -1)
+          [ -n "$ENG" ] || ENG=$(find td/package -name 'eng.traineddata.gz' | head -1)
+          gunzip -c "$ENG" > "$T/eng.traineddata"
+          ls -la "$T"
           ls -la "$W" "$W/fonts"
 
       - name: Decode the signing key

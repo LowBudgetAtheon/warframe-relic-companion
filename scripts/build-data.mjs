@@ -184,10 +184,16 @@ function htmlPlain(h) {
     .replace(/<span class="mw-editsection[\s\S]*?<\/span>\s*<\/span>/gi, "")
     .replace(/<h\d[\s\S]*?<\/h\d>/gi, " ")
     .replace(/<sup[^>]*class="reference[\s\S]*?<\/sup>/gi, "")
+    .replace(/<(span|div)[^>]*display:\s*none[^>]*>[^<]*<\/\1>/gi, "") // hidden sort keys inside currency templates
+    .replace(/<img[^>]*alt="([^"]*)"[^>]*>/gi, (m, alt) => { const c = /ducat/i.test(alt) ? "Ducats" : /platinum/i.test(alt) ? "Platinum" : /credit/i.test(alt) ? "Credits" : /aya/i.test(alt) ? "Aya" : ""; return c ? ` ${c} ` : " "; })
     .replace(/<br\s*\/?>|<\/p>|<\/li>/gi, " ")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/&#0?39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/\[edit[^\]]*\]/gi, "").replace(/\s+/g, " ").trim();
+    .replace(/\[edit[^\]]*\]/gi, "").replace(/\s+/g, " ").trim()
+    .replace(/\b(Credits|Ducats|Platinum|Aya) (\d[\d,.]*)\b(?! (?:Credits|Ducats|Platinum|Aya)\b)/g, "$2 $1") // "Credits 625,000" -> "625,000 Credits"
+    .replace(/(\d[\d,.]*) (Credits|Ducats|Platinum|Aya) \1\b/g, "$1 $2")       // "625,000 Credits 625,000"
+    .replace(/(\d[\d,.]*) \1\b/g, "$1")                                         // "675 675"
+    .replace(/(\d[\d,.]*) (Credits|Ducats|Platinum|Aya) \2\b/g, "$1 $2");
 }
 async function wikiAcquisition(name) {
   const page = encodeURIComponent(name.replace(/ /g, "_"));
@@ -353,6 +359,7 @@ async function build() {
     const base = x.name.replace(/ Prime$/, "");
     const it = { id: slug(x.name), n: x.name, cat, slot };
     if (x.vaulted != null) it.vaulted = !!x.vaulted;
+    if (x.buildTime > 0) it.bt = Math.round(x.buildTime / 360) / 10; // Foundry build time, hours
     it.parts = parts;
     if (reqList.length) it.req = reqList;
     if (isW) {
