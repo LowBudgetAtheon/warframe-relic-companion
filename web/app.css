@@ -750,3 +750,12 @@ details.rot{display:block}
 .chip.danger{border-color:var(--alert);color:var(--alert)}
 .chip[disabled]{opacity:.4;pointer-events:none}
 .clearbox .codebox{margin-top:8px}
+
+/* ---------- Inventory view ---------- */
+.invbox .search{margin:8px 0 6px}
+.invsum{font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.invlist{max-height:52vh;overflow:auto;border-top:1px solid var(--line)}
+.invlist .group{font:600 11.5px var(--fh);letter-spacing:.1em;text-transform:uppercase;color:var(--gold2);padding:8px 0 2px}
+.invrow{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.invrow .pn{flex:1;min-width:0}
+.invrow b{font:600 13px var(--fb);color:var(--teal)}
