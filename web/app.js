@@ -883,7 +883,7 @@ function renderRotating() {
     const inv = here && b.inventory && b.inventory.length
       ? `<div class="rlist">${b.inventory.map(x => row(x.n, [x.ducats ? `${x.ducats} ducats` : "", x.credits ? `${Number(x.credits).toLocaleString()} cr` : ""].filter(Boolean).join(" · "))).join("")}</div>`
       : msg(here ? "No inventory in the feed yet." : "His inventory shows up when he arrives.");
-    out += rotSection("baro", "Void Trader", note, `<div class="vline">Baro Ki'Teer · ${here ? "at" : "next at"} <b>${esc(b.location || "a relay")}</b></div>${inv}`);
+    out += rotSection("baro", "Void Trader", note, `<div class="vline">Baro Ki'Teer · ${here ? "at" : "next at"} <b>${esc(b.location || "a relay")}</b></div>${inv}${ducatHTML()}`);
   }
   const deals = (L.darvo || []).filter(d => !d.expiry || d.expiry > now);
   out += rotSection("darvo", "Darvo", deals[0] && deals[0].expiry ? `ends in ${until(deals[0].expiry)}` : "", deals.length ? deals.map(d => {
@@ -1348,6 +1348,12 @@ function bindEvents() {
   const pages = $("#pages");
   pages.addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.mgrp")) fillMg(e.target); }, true);
   pages.addEventListener("change", e => {
+    const dk = e.target.dataset.duc;
+    if (dk != null) {
+      state.ducKeep = state.ducKeep || {};
+      if (e.target.checked) delete state.ducKeep[dk]; else state.ducKeep[dk] = 1;
+      save(); const t = $("#ducTot"); if (t) t.innerHTML = ducatTotal(); return;
+    }
     const mid = e.target.dataset.m;
     if (mid) { // a modular piece: its tick is Mastered
       const snap = snapState(), it = BYID[mid];
@@ -1374,6 +1380,12 @@ function bindEvents() {
     }
     const vw = t.closest("[data-vw]");
     if (vw) { openVault(vw.dataset.vw); return; }
+    const da = t.closest("[data-ducall]");
+    if (da) {
+      state.ducKeep = {};
+      if (da.dataset.ducall === "0") ducatSpares().forEach(x => { state.ducKeep[x.full] = 1; });
+      save(); renderRotating(); return;
+    }
     const rb = t.closest("[data-relic]");
     if (rb) { showRelic(rb.dataset.relic); return; }
     const jp = t.closest("[data-jump]");
@@ -1383,7 +1395,7 @@ function bindEvents() {
       const id = m.dataset.mastered, snap = snapState(), it = BYID[id];
       const on = !state.mastered[id];
       if (!on) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); }
-      save(); renderMain(); renderFavs(); renderRuns();
+      save(); renderMain(); renderFavs(); renderRuns(); renderRotating();
       offerUndo(`${it ? it.n : "Item"} ${on ? "marked mastered" : "unmarked"}`, snap);
       return;
     }
@@ -1753,6 +1765,35 @@ async function loadData() {
   } catch (e) {
     DATA_OFFLINE = true; renderUpdated();
   }
+}
+
+/* ---------- DUCAT TRADE-INS (under the Void Trader) ----------
+   Spare Prime parts from the last Parts scan that belong to Primes you've mastered.
+   Copies still needed for a Prime you haven't mastered (e.g. Bronco Prime parts for
+   Akbronco Prime) are held back. Untick anything you'd rather keep. */
+function ducatSpares() {
+  const owned = state.partCounts || {}, reserve = new Map(), home = new Map();
+  ITEMS.forEach(it => (it.parts || []).forEach(p => home.set(p.full, { it, d: p.d })));
+  ITEMS.filter(active).forEach(it => unitsOf(it).forEach(u => { if (!u.whole && !u.own && u.full) reserve.set(u.full, (reserve.get(u.full) || 0) + 1); }));
+  return Object.entries(owned).map(([full, n]) => {
+    const h = home.get(full); if (!h || !h.d || !state.mastered[h.it.id]) return null;
+    const spare = n - (reserve.get(full) || 0);
+    return spare > 0 ? { full, n: spare, d: h.d, tot: spare * h.d } : null;
+  }).filter(Boolean).sort((a, b) => b.tot - a.tot || a.full.localeCompare(b.full));
+}
+function ducatHTML() {
+  const list = ducatSpares(), keep = state.ducKeep || {};
+  let h = `<div class="ducats"><h4>Spare parts for Ducats</h4><p class="secsub">Parts from your last scan that belong to Primes you've mastered, minus any still needed for others. Untick anything you want to keep; trade the rest at a Relay's Ducat kiosk.</p>`;
+  if (!Object.keys(state.partCounts || {}).length) return h + `<p class="empty">Upload a Parts recording under Import Data in Settings to see what you can trade in.</p></div>`;
+  if (!list.length) return h + `<p class="empty">Nothing spare in your last scan from a Prime you've mastered.</p></div>`;
+  h += `<div class="controls"><button class="chip ghost" data-ducall="1">Select all</button><button class="chip ghost" data-ducall="0">Select none</button></div><div class="rlist">`;
+  h += list.map(x => `<label class="rrow ducrow"><input type="checkbox" data-duc="${esc(x.full)}"${keep[x.full] ? "" : " checked"}><span class="pn">${esc(x.full)}${x.n > 1 ? ` <span class="sub" style="margin:0">x${x.n}</span>` : ""}</span><span class="pr">${x.n > 1 ? `${x.d} each · ` : ""}<b>${x.tot}</b></span></label>`).join("");
+  return h + `</div><div class="ductot" id="ducTot">${ducatTotal(list)}</div></div>`;
+}
+function ducatTotal(list = ducatSpares()) {
+  const keep = state.ducKeep || {}, sel = list.filter(x => !keep[x.full]);
+  const parts = sel.reduce((a, x) => a + x.n, 0), d = sel.reduce((a, x) => a + x.tot, 0);
+  return `Selected: <b>${parts}</b> part${parts === 1 ? "" : "s"} · <b class="gold">${d.toLocaleString()}</b> Ducats`;
 }
 
 /* Live worldstate: api.warframestat.us, falling back to DE's raw worldState.php */
