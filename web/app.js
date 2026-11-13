@@ -1380,6 +1380,8 @@ function bindEvents() {
     }
     const vw = t.closest("[data-vw]");
     if (vw) { openVault(vw.dataset.vw); return; }
+    const dopt = t.closest("[data-ducopt]");
+    if (dopt) { S()[dopt.dataset.ducopt] = !S()[dopt.dataset.ducopt]; save(); renderRotating(); return; }
     const da = t.closest("[data-ducall]");
     if (da) {
       state.ducKeep = {};
@@ -1775,17 +1777,25 @@ function ducatSpares() {
   const owned = state.partCounts || {}, reserve = new Map(), home = new Map();
   ITEMS.forEach(it => (it.parts || []).forEach(p => home.set(p.full, { it, d: p.d })));
   ITEMS.filter(active).forEach(it => unitsOf(it).forEach(u => { if (!u.whole && !u.own && u.full) reserve.set(u.full, (reserve.get(u.full) || 0) + 1); }));
-  return Object.entries(owned).map(([full, n]) => {
+  let list = Object.entries(owned).map(([full, n]) => {
     const h = home.get(full); if (!h || !h.d || !state.mastered[h.it.id]) return null;
     const spare = n - (reserve.get(full) || 0);
-    return spare > 0 ? { full, n: spare, d: h.d, tot: spare * h.d } : null;
-  }).filter(Boolean).sort((a, b) => b.tot - a.tot || a.full.localeCompare(b.full));
+    return spare > 0 ? { full, n: spare, d: h.d, tot: spare * h.d, it: h.it } : null;
+  }).filter(Boolean);
+  // "Hide complete sets": when the spares make a whole set, leave them for selling as a set
+  if (S().ducHideSets) {
+    const by = new Map(list.map(x => [x.full, x]));
+    const whole = new Set(list.map(x => x.it).filter(it => (it.parts || []).every(p => (by.get(p.full) || { n: 0 }).n >= (p.c || 1))));
+    list = list.filter(x => !whole.has(x.it));
+  }
+  return list.sort(S().ducAZ ? (a, b) => a.full.localeCompare(b.full) : (a, b) => b.tot - a.tot || a.full.localeCompare(b.full));
 }
 function ducatHTML() {
   const list = ducatSpares(), keep = state.ducKeep || {};
   let h = `<div class="ducats"><h4>Spare parts for Ducats</h4><p class="secsub">Parts from your last scan that belong to Primes you've mastered, minus any still needed for others. Untick anything you want to keep; trade the rest at a Relay's Ducat kiosk.</p>`;
   if (!Object.keys(state.partCounts || {}).length) return h + `<p class="empty">Upload a Parts recording under Import Data in Settings to see what you can trade in.</p></div>`;
-  if (!list.length) return h + `<p class="empty">Nothing spare in your last scan from a Prime you've mastered.</p></div>`;
+  h += `<div class="controls"><button class="chip ghost" data-ducopt="ducAZ" aria-pressed="${!!S().ducAZ}">A–Z</button><button class="chip ghost" data-ducopt="ducHideSets" aria-pressed="${!!S().ducHideSets}">Hide complete sets</button></div>`;
+  if (!list.length) return h + `<p class="empty">${S().ducHideSets ? "Nothing spare outside complete sets." : "Nothing spare in your last scan from a Prime you've mastered."}</p></div>`;
   h += `<div class="controls"><button class="chip ghost" data-ducall="1">Select all</button><button class="chip ghost" data-ducall="0">Select none</button></div><div class="rlist">`;
   h += list.map(x => `<label class="rrow ducrow"><input type="checkbox" data-duc="${esc(x.full)}"${keep[x.full] ? "" : " checked"}><span class="pn">${esc(x.full)}${x.n > 1 ? ` <span class="sub" style="margin:0">x${x.n}</span>` : ""}</span><span class="pr">${x.n > 1 ? `${x.d} each · ` : ""}<b>${x.tot}</b></span></label>`).join("");
   return h + `</div><div class="ductot" id="ducTot">${ducatTotal(list)}</div></div>`;
