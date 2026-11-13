@@ -56,7 +56,7 @@ jobs:
         run: |
           W="$GITHUB_WORKSPACE/android/app/src/main/assets/www"
           rm -rf "$W" && mkdir -p "$W/fonts" "$W/data"
-          cp web/*.html web/*.css web/*.js "$W/"
+          cp web/*.html web/*.css web/*.js web/*.png "$W/"
           cp data/relics.json "$W/data/"
           cd "$RUNNER_TEMP"
           npm pack @fontsource/rajdhani@5 @fontsource/inter@5 --silent

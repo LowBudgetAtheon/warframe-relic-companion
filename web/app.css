@@ -290,8 +290,8 @@ body.reduce-motion .qq{animation-duration:6s !important}
 @keyframes tracefade{0%{opacity:0}20%{opacity:.12}60%{opacity:.05}100%{opacity:0}}
 
 /* Orokin Sale */
-.ocell{position:fixed;top:-50px;z-index:55;width:var(--sz,24px);pointer-events:none;animation:cellfall var(--dur,2.6s) var(--delay,0s) linear forwards}
-.ocell svg{width:100%;height:auto;display:block;image-rendering:pixelated;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
+.ocell{position:fixed;top:-60px;z-index:55;width:calc(var(--sz,24px) * 1.8);pointer-events:none;animation:cellfall var(--dur,2.6s) var(--delay,0s) linear forwards}
+.ocell img{width:100%;height:auto;display:block;image-rendering:pixelated;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 @keyframes cellfall{to{transform:translateY(110vh) rotate(var(--rot,360deg))}}
 .modal.pop-sale{background:rgba(40,25,10,.55)}
 /* Retro sunburst sale: cream and sage rays with thin red lines, scalloped badge, halftone dots, brown script */
