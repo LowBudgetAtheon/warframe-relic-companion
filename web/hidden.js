@@ -220,8 +220,7 @@ function alertNote(t) { const m = document.getElementById("codeMsg"); if (m) { m
 /* ---------- Baro: visit Rotating while he's here ---------- */
 function checkBaro() {
   if (isUnlocked("baro") || page !== 0 || !LIVE || !LIVE.baro) return;
-  const b = LIVE.baro, now = Date.now();
-  if (b.active && b.expiry > now) {
+  if (baroHere(LIVE.baro)) {
     if (unlockHidden("baro")) secretPop("pop-baro", "A gift from the Void Trader", "<p>Baro Ki'Teer noticed you browsing his wares, and left something gilded behind.</p><p>Baro Ki'Teer theme unlocked.</p>", "Accept");
   }
 }

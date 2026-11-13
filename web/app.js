@@ -216,7 +216,7 @@ function liveRelicSet(list) {
 let BARO_SET = new Set(), VARZIA_SET = new Set();
 function refreshLiveSets() {
   const now = Date.now();
-  BARO_SET = LIVE && LIVE.baro && LIVE.baro.active && LIVE.baro.expiry > now ? liveRelicSet(LIVE.baro.inventory) : new Set();
+  BARO_SET = baroHere(LIVE && LIVE.baro, now) ? liveRelicSet(LIVE.baro.inventory) : new Set();
   VARZIA_SET = LIVE && LIVE.varzia && (!LIVE.varzia.expiry || LIVE.varzia.expiry > now) ? liveRelicSet(LIVE.varzia.inventory) : new Set();
 }
 /* av = drops in missions now, ba = Baro has it, rs = Varzia has it, va = vaulted */
@@ -878,7 +878,7 @@ function renderRotating() {
   let out = "";
   const b = L.baro;
   if (b) {
-    const here = b.active && b.expiry > now;
+    const here = baroHere(b, now);
     const note = here ? `leaves in ${until(b.expiry)}` : b.activation > now ? `arrives in ${until(b.activation)}` : "";
     const inv = here && b.inventory && b.inventory.length
       ? `<div class="rlist">${b.inventory.map(x => row(x.n, [x.ducats ? `${x.ducats} ducats` : "", x.credits ? `${Number(x.credits).toLocaleString()} cr` : ""].filter(Boolean).join(" · "))).join("")}</div>`
@@ -1756,13 +1756,21 @@ async function loadData() {
 }
 
 /* Live worldstate: api.warframestat.us, falling back to DE's raw worldState.php */
+/* Is Baro at a relay right now? Go by his arrival and leaving times, not the feed's "active"
+   flag, which can lag behind or be missing when the data comes from the cache. */
+function baroHere(b, now = Date.now()) {
+  if (!b) return false;
+  if (b.activation && b.expiry) return b.activation <= now && now < b.expiry;
+  return !!b.active && (!b.expiry || b.expiry > now);
+}
 const ms = v => { if (v == null) return 0; if (typeof v === "number") return v; if (v.$date) return +(v.$date.$numberLong || v.$date); const t = Date.parse(v); return isNaN(t) ? 0 : t; };
 async function liveFromStat() {
   const q = "?language=en";
   const rs = await Promise.allSettled(["voidTrader", "dailyDeals", "steelPath", "fissures", "vaultTrader", "duviriCycle"].map(k => getJSONAny(`${WS}/${k}${q}`)));
   if (rs.every(r => r.status === "rejected")) throw new Error("warframestat unreachable");
   const v = i => rs[i].status === "fulfilled" ? rs[i].value : null;
-  const vt = v(0), dd = v(1), sp = v(2), fi = v(3), vz = v(4), dc = v(5);
+  const vt0 = v(0), dd = v(1), sp = v(2), fi = v(3), vz = v(4), dc = v(5), t0 = Date.now();
+  const vt = Array.isArray(vt0) ? vt0.find(t => ms(t.activation) <= t0 && t0 < ms(t.expiry)) || vt0[0] : vt0; // some feed versions list traders
   const hard = dc && Array.isArray(dc.choices) ? dc.choices.find(x => /hard|steel/i.test(x.category || "")) : null;
   return {
     baro: vt ? { active: !!vt.active, activation: ms(vt.activation), expiry: ms(vt.expiry), location: vt.location, inventory: (vt.inventory || []).map(x => ({ n: x.item, ducats: x.ducats, credits: x.credits })) } : null,
@@ -1794,9 +1802,22 @@ async function liveFromRaw() {
     circuit: ((w.EndlessXpChoices || []).find(x => /HARD/.test(x.Category || "")) || {}).Choices || null,
   };
 }
+let liveBusy = false, baroTimer = 0;
 async function loadLive() {
+  if (liveBusy) return; liveBusy = true;
   let live = null;
   try { live = await liveFromStat(); } catch (e) { try { live = await liveFromRaw(); } catch (e2) { live = null; } }
+  // warframestat can lag behind Baro's arrival (still showing last visit, or no inventory yet):
+  // then take Baro from DE's own worldstate
+  const now = Date.now(), b = live && live.baro;
+  if (live && (!b || !(baroHere(b, now) && (b.inventory || []).length)) && (!b || !b.activation || b.activation <= now || b.expiry <= now)) {
+    try { const raw = await liveFromRaw(); if (raw.baro && (baroHere(raw.baro, now) || !b)) live.baro = raw.baro; } catch (e) {}
+  }
+  liveBusy = false;
+  // refresh again just after Baro arrives, if the app is open then
+  clearTimeout(baroTimer);
+  const nb = (live || LIVE || {}).baro;
+  if (nb && nb.activation > now && nb.activation - now < 2 ** 31 - 1) baroTimer = setTimeout(loadLive, nb.activation - now + 90e3);
   if (live) {
     LIVE = live; LIVE_AT = Date.now(); LIVE_OFFLINE = false;
     try { localStorage.setItem(KEY_LIVE, JSON.stringify({ at: LIVE_AT, l: LIVE })); } catch (e) {}
@@ -1816,6 +1837,9 @@ setInterval(() => {
   });
 }, 1000);
 setInterval(renderUpdated, 30000);
+// keep the live feed current while the app is open, and when it comes back to the front
+setInterval(() => { if (!document.hidden) loadLive(); }, 10 * 60e3);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - LIVE_AT > 5 * 60e3) loadLive(); });
 
 /* ---------- INTRO ---------- */
 function runIntro() {
