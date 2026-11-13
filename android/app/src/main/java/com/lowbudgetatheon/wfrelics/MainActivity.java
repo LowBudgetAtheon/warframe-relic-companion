@@ -33,6 +33,8 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Arrays;
@@ -55,6 +57,8 @@ public class MainActivity extends Activity {
             "api.warframestat.us", "content.warframe.com", "raw.githubusercontent.com"));
 
     private static final int PICK_FILE = 42;
+    private static final int SAVE_FILE = 43;
+    private String pendingSave; // backup text waiting for the user to pick where it goes
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
     private final ExecutorService pool = Executors.newFixedThreadPool(3);
@@ -138,6 +142,17 @@ public class MainActivity extends Activity {
             fileCallback = null;
             return;
         }
+        if (request == SAVE_FILE) {
+            boolean ok = false;
+            if (result == RESULT_OK && data != null && data.getData() != null && pendingSave != null) {
+                try (OutputStream os = getContentResolver().openOutputStream(data.getData())) {
+                    if (os != null) { os.write(pendingSave.getBytes(StandardCharsets.UTF_8)); ok = true; }
+                } catch (IOException e) { ok = false; }
+            }
+            pendingSave = null;
+            web.evaluateJavascript("window.__wrcSaved && window.__wrcSaved(" + ok + ")", null);
+            return;
+        }
         super.onActivityResult(request, result, data);
     }
 
@@ -174,6 +189,20 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        /* Save a text file (the backup) wherever the user picks, through Android's file picker */
+        @JavascriptInterface
+        public void saveFile(String name, String text) {
+            ui.post(() -> {
+                pendingSave = text;
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("text/plain");
+                i.putExtra(Intent.EXTRA_TITLE, name);
+                try { startActivityForResult(i, SAVE_FILE); }
+                catch (Exception e) { pendingSave = null; web.evaluateJavascript("window.__wrcSaved && window.__wrcSaved(false)", null); }
+            });
+        }
+
         @JavascriptInterface
         public void copy(String text) {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);

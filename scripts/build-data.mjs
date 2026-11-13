@@ -21,6 +21,9 @@ const OUT = new URL("data/relics.json", ROOT);
 const COMMUNITY = new URL("data/community-farms.json", ROOT);
 const VAULT_WATCH = new URL("data/vault-watch.json", ROOT);
 const OVERRIDES = new URL("data/overrides.json", ROOT);
+const ACQ_CACHE = new URL("data/acquisition.json", ROOT); // wiki How to get text for Base items, refreshed a batch at a time
+const ACQ_PER_RUN = +process.env.ACQ_PER_RUN || 250, ACQ_MAX_AGE_D = 30;
+const NO_WIKI = !!process.env.NO_WIKI; // local test runs without wiki access
 const MERGE_ON_FAIL = process.argv.includes("--merge-only-on-failure");
 const UA = "warframe-relic-companion-data/1.0 (+https://github.com/LowBudgetAtheon/warframe-relic-companion)";
 
@@ -64,6 +67,7 @@ const fail = m => { console.error("[data]", m); if (GHA) console.log(`::error ti
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function get(url, type = "json", tries = 3) {
+  if (process.env.OFFLINE) throw new Error("offline test run");
   let last;
   for (let i = 0; i < tries; i++) {
     try {
@@ -196,6 +200,7 @@ function htmlPlain(h) {
     .replace(/(\d[\d,.]*) (Credits|Ducats|Platinum|Aya) \2\b/g, "$1 $2");
 }
 async function wikiAcquisition(name) {
+  if (NO_WIKI) return null;
   const page = encodeURIComponent(name.replace(/ /g, "_"));
   const base = `${WIKI_API}?action=parse&page=${page}&format=json&formatversion=2&redirects=1`;
   try {
@@ -299,6 +304,8 @@ async function build() {
   }
   const mods = await wfcd("Mods").catch(e => { log("Mods.json failed:", e.message); return []; });
   const relicList = await wfcd("Relics").catch(e => { log("Relics.json failed:", e.message); return []; });
+  const comps = await wfcd("Components").catch(e => { warn(`Components.json failed: ${e.message}`); return []; });
+  const arcanes = await wfcd("Arcanes").catch(e => { log("Arcanes.json failed:", e.message); return []; });
   note(`WFCD lists: ${Object.entries(lists).map(([k, v]) => `${k}=${v.length}`).join(", ")}, Mods=${mods.length}, Relics=${relicList.length}`);
 
   let drops = { missions: [], relicItems: {} };
@@ -506,13 +513,178 @@ async function build() {
   if (guessedNames.length) warn(`Guessed count of 1: ${guessedNames.join("; ")}`);
   if (counts.items < 100 || counts.frames < 30 || counts.relics < 200) throw new Error(`sanity check failed: ${JSON.stringify(counts)}`);
 
+  const { base, groups } = await buildBase(lists, comps, new Set(items.map(i => i.n)));
+  const trade = tradeNames(lists, mods, arcanes, relicList, items);
+  note(`Trade names: ${trade.length}`);
   return {
     schema: 1,
     sources: { wfcdItems: true, dropTables: dropsOk, wikiIncarnon: wikiInc.size > 0 },
+    base, groups, trade,
     items: items.sort((a, b) => a.n.localeCompare(b.n)),
     relics: Object.fromEntries(Object.entries(relics).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))),
     nodes,
   };
+}
+
+/* ---------- BASE (non-Prime) ITEMS ----------
+   Every non-Prime item that counts for mastery, plus Tauron Strikes for completion.
+   Items keep the Prime shape (id, n, cat, slot, parts) so the app treats them alike.
+   Extra fields: b (Base), own (no parts: one Owned tick), k ("m" modular piece whose
+   tick is Mastered, "t" collected only, not mastery), grp (the card it sits in). */
+const BASE_VAR_PRE = /^(Kuva|Tenet|Prisma|Coda|Telos|Vaykor|Rakta|Sancti|Secura|Synoid|Dex|Carmine|Mara|Mutalist|Proboscis)\s+(.+)$/;
+const BASE_VAR_SUF = /^(.+)\s+(Vandal|Wraith|Umbra)$/;
+const baseOf = n => { let m = /^Mk1-(.+)$/i.exec(n); if (m) return m[1]; m = BASE_VAR_SUF.exec(n); if (m) return m[1]; m = BASE_VAR_PRE.exec(n); return m ? m[2] : null; };
+const MOD_GROUPS = {
+  Zaws: ["modweapons", "Zaws", "Only the strike counts for mastery. Grips and links don't, so there's one tick per strike."],
+  Kitguns: ["modweapons", "Kitguns", "Only the chamber counts for mastery. Grips and loaders don't, so there's one tick per chamber."],
+  Amps: ["amps", "Amps", "Only the prism counts for mastery. Scaffolds and braces don't, so there's one tick per prism."],
+  "K-Drives": ["vehicles", "K-Drive", "Only the board counts for mastery. Noses, jets and reactors don't, so there's one tick per board."],
+  Hounds: ["modcompanions", "Hounds", "Only the model counts for mastery. Cores, brackets and stabilizers don't, so there's one tick per model."],
+  MOAs: ["modcompanions", "MOAs", "Only the model counts for mastery. Cores, gyros and brackets don't, so there's one tick per model."],
+  Predasites: ["modcompanions", "Predasites", "Each Predasite type counts once for mastery, whatever its mutagen and antigen."],
+  Vulpaphylas: ["modcompanions", "Vulpaphylas", "Each Vulpaphyla type counts once for mastery, whatever its mutagen and antigen."],
+  Kubrows: ["companions", "Kubrows", "Each breed counts once for mastery. Tick a breed once you've mastered one."],
+  Kavats: ["companions", "Kavats", "Each breed counts once for mastery. Tick a breed once you've mastered one."],
+};
+const TAURON = [["Cogron", "Unairu"], ["Lorak", "Zenurik"], ["Nidri", "Vazarin"], ["Thara", "Madurai"], ["Vexoric", "Naramon"]];
+const SPECIAL_GET = [
+  [/^Kuva /, "Earned by converting or vanquishing a Kuva Lich who carries it."],
+  [/^Tenet /, "Earned from a Sister of Parvos who carries it, or bought from Ergo Glast in the Relay with Corrupted Holokeys."],
+  [/^Coda /, "Earned from a Technocyte Coda who carries it, or bought from Eleanor in the Hollvania Central Mall with Live Heartcells."],
+];
+function modGroupOf(x, f) {
+  const n = x.name || "", t = x.type || "", u = x.uniqueName || "";
+  // strikes, chambers and boards are masterable; grips, links and loaders aren't
+  if (t === "Zaw Component") return x.masterable ? "Zaws" : null;
+  if (t === "Kitgun Component") return x.masterable ? "Kitguns" : null;
+  if (/InfKitGun\/Barrels\//.test(u)) return "Kitguns"; // Sporelacer, Vermisplicer
+  if (t === "Amp" && / Prism$/.test(n)) return "Amps";
+  if (t === "K-Drive Component") return x.masterable ? "K-Drives" : null;
+  if (f === "Pets") {
+    if (/ Hound$/.test(n)) return "Hounds";
+    if (/ Moa$/.test(n)) return "MOAs";
+    if (/ Predasite$/.test(n)) return "Predasites";
+    if (/ Vulpaphyla$/.test(n)) return "Vulpaphylas";
+    if (/ Kavat$/.test(n)) return "Kavats";
+    if (/ Kubrow$|^Helminth Charger$/.test(n)) return "Kubrows";
+  }
+  return null;
+}
+function baseClass(x, f) { // -> [cat, slot] or null
+  const pc = x.productCategory || "", t = x.type || "";
+  if (pc === "OperatorAmps") return ["amps", "Sirocco"];
+  if (f === "Warframes") return t === "Necramech" || pc === "MechSuits" ? ["vehicles", "Necramech"] : ["warframes", "Warframe"];
+  if (f === "Archwing") return ["vehicles", "Archwing"];
+  if (f === "Arch-Gun") return ["archweapons", "Arch-gun"];
+  if (f === "Arch-Melee") return ["archweapons", "Arch-melee"];
+  if (f === "Sentinels") return ["companions", "Sentinel"];
+  if (f === "SentinelWeapons") return ["companions", "Sentinel weapon"];
+  if (["Primary", "Secondary", "Melee"].includes(f)) return ["weapons", f];
+  return null;
+}
+function fallbackGet(x, compIdx) {
+  for (const [re, t] of SPECIAL_GET) if (re.test(x.name)) return t;
+  const bits = [];
+  const bp = (x.components || []).find(c => /Blueprint$/.test(c.uniqueName || ""));
+  // "Elite Sanctuary Onslaught, Rotation B" and "... Rotation C" are one place to the player
+  const top = d => (d || []).slice().sort((a, b) => (b.chance || 0) - (a.chance || 0)).map(z => String(z.location || "").replace(/,?\s*Rotation [A-C]$/i, "").trim()).filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 3);
+  if (x.bpCost) bits.push(`Blueprint from the Market for ${Number(x.bpCost).toLocaleString("en-US")} Credits.`);
+  else { const bd = top(bp && (compIdx[bp.uniqueName] || {}).drops); if (bd.length) bits.push(`Blueprint drops from ${bd.join(", ")}.`); }
+  const partDrops = [];
+  (x.components || []).forEach(c => { const ci = compIdx[c.uniqueName]; if (ci && ci.name !== "Blueprint") partDrops.push(...top(ci.drops)); });
+  const pd = partDrops.filter((v, i, a) => a.indexOf(v) === i).slice(0, 3);
+  if (pd.length && bits.length === 1 && bits[0] === `Blueprint drops from ${pd.join(", ")}.`) bits[0] = `Blueprint and parts drop from ${pd.join(", ")}.`;
+  else if (pd.length) bits.push(`Parts drop from ${pd.join(", ")}.`);
+  if (x.marketCost) bits.push(`Or buy it built from the Market for ${x.marketCost} Platinum.`);
+  if (!bits.length) { const d = top(x.drops); if (d.length) bits.push(`Drops from ${d.join(", ")}.`); }
+  return bits.join(" ") || null;
+}
+async function buildBase(lists, comps, primeNames) {
+  const compIdx = Object.fromEntries(comps.map(c => [c.uniqueName, c]));
+  const files = ["Warframes", "Primary", "Secondary", "Melee", "Archwing", "Arch-Gun", "Arch-Melee", "Sentinels", "SentinelWeapons", "Pets", "Misc"];
+  const raw = [], seen = new Set(), byUnique = {};
+  for (const f of files) for (const x of lists[f] || []) {
+    const n = x.name || "";
+    if (!n || seen.has(n) || /(^| )Prime( |$)/.test(n)) continue;
+    const mg = modGroupOf(x, f);
+    if (!mg && !x.masterable) continue;
+    const cl = mg ? MOD_GROUPS[mg].slice(0, 2) : baseClass(x, f);
+    if (!cl) continue;
+    seen.add(n); raw.push({ x, f, cat: cl[0], slot: cl[1], mg });
+    if (x.uniqueName) byUnique[x.uniqueName] = n;
+  }
+  // How to get: wiki text from the cache, a batch refreshed each run; WFCD-based text otherwise
+  const cache = await readJSON(ACQ_CACHE, {});
+  const now = Date.now(), stale = e => !e || now - Date.parse(e.at || 0) > ACQ_MAX_AGE_D * 864e5;
+  const want = [...raw.map(r => r.x.name), ...TAURON.map(([a]) => a)];
+  const todo = want.filter(n => stale(cache[n])).sort((a, b) => Date.parse((cache[a] || {}).at || 0) - Date.parse((cache[b] || {}).at || 0)).slice(0, NO_WIKI ? 0 : ACQ_PER_RUN);
+  let fetched = 0;
+  for (const n of todo) { const t = await wikiAcquisition(n); cache[n] = { t: t || (cache[n] || {}).t || null, at: new Date().toISOString() }; if (t) fetched++; }
+  if (todo.length) note(`Base How to get: refreshed ${todo.length} from the wiki (${fetched} found); ${want.filter(n => cache[n] && cache[n].t).length} of ${want.length} have wiki text`);
+  if (!NO_WIKI) await fs.writeFile(ACQ_CACHE, JSON.stringify(Object.fromEntries(Object.entries(cache).filter(([k]) => want.includes(k)).sort((a, b) => a[0].localeCompare(b[0])))) + "\n");
+  const getOf = x => (cache[x.name] && cache[x.name].t) || fallbackGet(x, compIdx) || "See the wiki for how to get it.";
+
+  const names = new Set(raw.map(r => r.x.name));
+  const items = [], groups = {};
+  const addGroup = (id, g) => { if (!groups[id]) groups[id] = g; return id; };
+  for (const { x, cat, slot, mg } of raw) {
+    const it = { id: slug(x.name), n: x.name, cat, slot, b: 1 };
+    if (x.buildTime > 0) it.bt = Math.round(x.buildTime / 360) / 10;
+    if (x.wikiaUrl) it.wiki = wikiUrl(x.wikiaUrl);
+    it.get = getOf(x);
+    if (mg) {
+      it.k = "m";
+      const [gcat, gslot, gnote] = MOD_GROUPS[mg];
+      it.grp = addGroup("g-" + slug(mg), { n: mg, cat: gcat, slot: gslot, kind: "mod", note: gnote });
+      it.get = getOf(x);
+      items.push(it); continue;
+    }
+    const parts = [], req = new Map();
+    for (const c of x.components || []) {
+      const un = c.uniqueName || "";
+      if (byUnique[un] && byUnique[un] !== x.name) { req.set(byUnique[un], (req.get(byUnique[un]) || 0) + (c.itemCount || 1)); continue; }
+      const ci = compIdx[un];
+      const label = ci ? ci.name : /Blueprint$/.test(un) ? "Blueprint" : null;
+      if (!label) continue; // resources
+      const full = label === "Blueprint" ? `${x.name} Blueprint` : `${x.name} ${label}`;
+      const e = parts.find(p => p.full === full);
+      if (e) e.c += c.itemCount || 1; else parts.push({ p: label, full, c: c.itemCount || 1, r: [] });
+    }
+    parts.sort((a, b) => (a.p === "Blueprint" ? -1 : 0) - (b.p === "Blueprint" ? -1 : 0));
+    if (parts.length) it.parts = parts; else it.own = 1;
+    if (req.size) it.req = [...req.entries()].map(([n, c]) => ({ n, c }));
+    if (["weapons", "archweapons"].includes(cat) || (cat === "companions" && slot === "Sentinel weapon")) it.w = 1;
+    // variants sit in one card with their base item
+    const bn = baseOf(x.name);
+    const root = bn && names.has(bn) ? bn : names.has(x.name) && raw.some(r => baseOf(r.x.name) === x.name) ? x.name : null;
+    if (root) {
+      const rr = raw.find(r => r.x.name === root);
+      it.grp = addGroup("g-" + slug(root), { n: root, cat: rr.cat, slot: rr.slot, kind: "var" });
+      if (primeNames.has(`${root} Prime`)) groups[it.grp].prime = `${root} Prime`;
+    } else if (primeNames.has(`${x.name} Prime`)) it.prime = `${x.name} Prime`;
+    items.push(it);
+  }
+  for (const [a, school] of TAURON) {
+    const it = { id: slug(`tauron ${a}`), n: a, cat: "tauron", slot: "Tauron Strike", b: 1, k: "t" };
+    it.get = (cache[a] && cache[a].t) || `Sold by Marie in La Cathédrale once you've finished The Old Peace. Unlocks the ${school} Tauron Strike.`;
+    it.grp = addGroup("g-tauron", { n: "Tauron Strikes", cat: "tauron", slot: "Tauron Strike", kind: "tauron", note: "Tauron Strikes don't count toward mastery. These ticks are only for tracking which Tektolyst Artifacts you've collected." });
+    items.push(it);
+  }
+  // auto notes for items built from other items
+  for (const it of items) if (it.req && !it.note) it.note = it.req.map(r => `Needs ${r.c === 1 ? "a" : r.c} fully built ${r.n}${r.c > 1 ? "s" : ""}, and crafting uses ${r.c === 1 ? "it" : "them"} up.`).join(" ");
+  const c = {}; items.forEach(i => { c[i.cat] = (c[i.cat] || 0) + 1; });
+  note(`Base items: ${items.length} (${Object.entries(c).map(([k, v]) => `${k} ${v}`).join(", ")}), ${Object.keys(groups).length} cards with more than one item`);
+  if (items.length < 300) throw new Error(`Base sanity check failed: only ${items.length} items`);
+  return { base: items.sort((a, b) => a.n.localeCompare(b.n)), groups };
+}
+/* Names for the trade chat builder: everything tradable people type in chat */
+function tradeNames(lists, mods, arcanes, relicList, items) {
+  const out = new Set();
+  mods.forEach(m => { if (m.tradable && m.name && !/Riven Mod/.test(m.name)) out.add(m.name); });
+  arcanes.forEach(a => { if (a.tradable !== false && a.name && !/^Arcane$/.test(a.name)) out.add(a.name); });
+  relicList.forEach(r => { const n = relicName(r.name); if (n) out.add(`${n} Relic`); });
+  items.forEach(it => { if (it.src === "other") return; (it.parts || []).forEach(p => out.add(p.full)); out.add(`${it.n} Set`); });
+  return [...out].sort((a, b) => a.localeCompare(b));
 }
 
 function stats(x) {
