@@ -306,6 +306,7 @@ async function build() {
   const relicList = await wfcd("Relics").catch(e => { log("Relics.json failed:", e.message); return []; });
   const comps = await wfcd("Components").catch(e => { warn(`Components.json failed: ${e.message}`); return []; });
   const arcanes = await wfcd("Arcanes").catch(e => { log("Arcanes.json failed:", e.message); return []; });
+  const compDucats = Object.fromEntries(comps.filter(c => c.ducats).map(c => [c.uniqueName, c.ducats])); // what a Prime part sells for
   note(`WFCD lists: ${Object.entries(lists).map(([k, v]) => `${k}=${v.length}`).join(", ")}, Mods=${mods.length}, Relics=${relicList.length}`);
 
   let drops = { missions: [], relicItems: {} };
@@ -370,7 +371,7 @@ async function build() {
 
   const items = [];
   for (const { x, cat, slot, isW } of raw) {
-    const req = new Map(), counts = new Map(), order = [], otherIds = [];
+    const req = new Map(), counts = new Map(), order = [], otherIds = [], ducats = new Map();
     const mine = ownParts[x.name] || [];
     const byKey = Object.fromEntries(mine.map(nm => [key(nm), nm]));
     // second chance: drop the item's own words and compare what's left ("PrimeDualKamasBlade" -> "blade")
@@ -393,11 +394,12 @@ async function build() {
       }
       if (!counts.has(full)) order.push(full);
       counts.set(full, (counts.get(full) || 0) + (c.itemCount || 1));
+      if (compDucats[un]) ducats.set(full, compDucats[un]);
     }
     for (const nm of mine) if (!counts.has(nm)) { order.push(nm); counts.set(nm, 1); guessed++; guessedNames.push(nm); }
     order.sort((a, b) => (/ Blueprint$/.test(a) && a === `${x.name} Blueprint` ? -1 : 0) - (/ Blueprint$/.test(b) && b === `${x.name} Blueprint` ? -1 : 0));
     const parts = order.map(full => ({
-      p: full.slice(x.name.length + 1), full, c: counts.get(full),
+      p: full.slice(x.name.length + 1), full, c: counts.get(full), ...(ducats.get(full) ? { d: ducats.get(full) } : {}),
       r: rewardRelics[full].slice().sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true })),
     }));
     const reqList = [...req.entries()].map(([n, c]) => ({ n, c }));

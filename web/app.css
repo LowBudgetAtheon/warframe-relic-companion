@@ -848,3 +848,13 @@ details.tdd > summary .sec{margin:0}
 .upbtn.show{opacity:1;pointer-events:auto;transform:none}
 body.reduce-motion .undobar,body.reduce-motion .upbtn{transition:none}
 .note a{color:var(--gold2)}
+
+/* ---------- Ducat trade-ins under the Void Trader ---------- */
+.ducats{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.ducats h4{font:700 13px var(--fh);letter-spacing:.12em;text-transform:uppercase;color:var(--gold2);margin:0 0 4px}
+.ducrow{display:flex;align-items:center;gap:10px;cursor:pointer;min-height:40px}
+.ducrow input{flex:none;width:20px;height:20px;accent-color:var(--teal)}
+.ducrow .pn{flex:1;min-width:0}
+.ducrow .pr b{color:var(--gold2)}
+.ductot{margin-top:10px;padding:10px 12px;border:1px solid var(--gold);border-radius:8px;font-size:14px;text-align:right}
+.ductot .gold{color:var(--gold2);font-size:16px}
