@@ -14,6 +14,7 @@
 @font-face{font-family:"Crimson Pro";font-weight:400;font-display:swap;src:url(fonts/crimson-pro-latin-400-normal.woff2) format("woff2")}
 @font-face{font-family:"Crimson Pro";font-weight:600;font-display:swap;src:url(fonts/crimson-pro-latin-600-normal.woff2) format("woff2")}
 
+@font-face{font-family:Lobster;font-weight:400;font-display:swap;src:url(fonts/lobster-latin-400-normal.woff2) format("woff2")}
 @font-face{font-family:VT323;font-weight:400;font-display:swap;src:url(fonts/vt323-latin-400-normal.woff2) format("woff2")}
 
 /* ---------- THEMES ---------- */
@@ -289,20 +290,24 @@ body.reduce-motion .qq{animation-duration:6s !important}
 @keyframes tracefade{0%{opacity:0}20%{opacity:.12}60%{opacity:.05}100%{opacity:0}}
 
 /* Orokin Sale */
-.ocell{position:fixed;top:-50px;z-index:110;width:var(--sz,24px);pointer-events:none;animation:cellfall var(--dur,2.6s) var(--delay,0s) linear forwards}
-.ocell svg{width:100%;height:auto;display:block;filter:drop-shadow(0 0 4px rgba(79,209,197,.7))}
+.ocell{position:fixed;top:-60px;z-index:55;width:calc(var(--sz,24px) * 1.8);pointer-events:none;animation:cellfall var(--dur,2.6s) var(--delay,0s) linear forwards}
+.ocell img{width:100%;height:auto;display:block;image-rendering:pixelated;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
 @keyframes cellfall{to{transform:translateY(110vh) rotate(var(--rot,360deg))}}
-.modal.pop-sale .card{background:repeating-conic-gradient(from 0deg,#ffe600 0 10deg,#ffcc00 10deg 20deg);border:4px solid #e60000;box-shadow:0 0 0 4px #fff,0 0 30px #ff0;transform:rotate(-2deg);animation:salepulse .6s ease-in-out infinite alternate}
-.modal.pop-sale .chead{background:#e60000;border-bottom:0;text-align:center}
-.modal.pop-sale .chead .name{color:#fff}
-.sale-big{display:block;font:700 40px/1 var(--fh);letter-spacing:.04em;text-transform:uppercase;color:#fff;text-shadow:3px 3px 0 #7a0000,0 0 12px #ff0}
-.sale-burst{display:inline-block;background:#e60000;color:#ffe600;font:700 18px var(--fh);letter-spacing:.2em;padding:4px 12px;transform:rotate(-4deg);border:2px dashed #fff;margin:4px 0 10px}
-.modal.pop-sale .mbody{text-align:center;color:#3a0000}
-.sale-line{font:700 17px/1.3 var(--fh);text-transform:uppercase}
-.sale-fine{font-size:10.5px;opacity:.8}
-.modal.pop-sale .builtbtn{align-self:center;background:#e60000;color:#ffe600;border:2px solid #fff;font-size:15px;padding:8px 18px}
-@keyframes salepulse{to{transform:rotate(2deg) scale(1.03)}}
-body.reduce-motion .modal.pop-sale .card{animation:none}
+.modal.pop-sale{background:rgba(40,25,10,.55)}
+/* Retro sunburst sale: cream and sage rays with thin red lines, scalloped badge, halftone dots, brown script */
+.sale{position:relative;width:min(92vw,400px);aspect-ratio:1;display:grid;place-items:center;overflow:hidden;border-radius:6px;box-shadow:0 10px 40px rgba(0,0,0,.45);
+  background:repeating-conic-gradient(from 0deg at 50% 50%,#f8f1c9 0deg 5.2deg,#c1272d 5.2deg 5.8deg,#9fb3ad 5.8deg 6.4deg,#d7dcc1 6.4deg 11.4deg,#c1272d 11.4deg 12deg)}
+.sale-badge{width:84%;aspect-ratio:1;display:grid;place-items:center;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-50 -50 100 100'%3E%3Cpath d='M41.0 0.0Q49.3 6.5 39.6 10.6Q45.9 19.0 35.5 20.5Q39.4 30.2 29.0 29.0Q30.2 39.4 20.5 35.5Q19.0 45.9 10.6 39.6Q6.5 49.3 0.0 41.0Q-6.5 49.3 -10.6 39.6Q-19.0 45.9 -20.5 35.5Q-30.2 39.4 -29.0 29.0Q-39.4 30.2 -35.5 20.5Q-45.9 19.0 -39.6 10.6Q-49.3 6.5 -41.0 0.0Q-49.3 -6.5 -39.6 -10.6Q-45.9 -19.0 -35.5 -20.5Q-39.4 -30.2 -29.0 -29.0Q-30.2 -39.4 -20.5 -35.5Q-19.0 -45.9 -10.6 -39.6Q-6.5 -49.3 -0.0 -41.0Q6.5 -49.3 10.6 -39.6Q19.0 -45.9 20.5 -35.5Q30.2 -39.4 29.0 -29.0Q39.4 -30.2 35.5 -20.5Q45.9 -19.0 39.6 -10.6Q49.3 -6.5 41.0 -0.0Z' fill='%23d7dcc1' stroke='%23fbf3b5' stroke-width='2.2'/%3E%3C/svg%3E") center/contain no-repeat;animation:salewob 3s ease-in-out infinite}
+.sale-in{width:78%;aspect-ratio:1;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;color:#3d2314;
+  background:radial-gradient(circle,rgba(255,255,255,.55) 1.3px,transparent 1.6px) 0 0/9px 9px}
+.sale-kicker{font:700 11px var(--fb);letter-spacing:.28em;text-transform:uppercase;color:#8a2a1e}
+.sale-big{font:400 clamp(40px,13vw,58px)/1 Lobster,"Brush Script MT",cursive;color:#3d2314;transform:rotate(-6deg);text-shadow:2px 2px 0 rgba(255,255,255,.5)}
+.sale-line{font:600 13px/1.3 var(--fb);max-width:85%}
+.sale-btn{margin-top:4px;background:#3d2314;color:#f8f1c9;border:0;border-radius:99px;padding:8px 20px;font:700 13px var(--fb);letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+.sale-fine{font-size:9.5px;opacity:.75;max-width:80%}
+@keyframes salewob{50%{transform:rotate(4deg) scale(1.02)}}
+body.reduce-motion .sale-badge{animation:none}
 .modal.pop-coda .chead{background:linear-gradient(90deg,#000080,#1084d0)}
 .modal.pop-coda .card{background:#c0c0c0;border:2px solid;border-color:#fff #404040 #404040 #fff;border-radius:0;font-family:VT323,monospace;color:#000}
 .modal.pop-coda .name{color:#fff;font-family:VT323,monospace;text-transform:none}

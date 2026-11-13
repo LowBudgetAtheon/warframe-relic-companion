@@ -56,7 +56,7 @@ jobs:
         run: |
           W="$GITHUB_WORKSPACE/android/app/src/main/assets/www"
           rm -rf "$W" && mkdir -p "$W/fonts" "$W/data"
-          cp web/*.html web/*.css web/*.js "$W/"
+          cp web/*.html web/*.css web/*.js web/*.png "$W/"
           cp data/relics.json "$W/data/"
           cd "$RUNNER_TEMP"
           npm pack @fontsource/rajdhani@5 @fontsource/inter@5 --silent
@@ -76,6 +76,10 @@ jobs:
           npm pack @fontsource/vt323@5 --silent
           mkdir vt && tar xzf fontsource-vt323-*.tgz -C vt
           cp vt/package/files/vt323-latin-400-normal.woff2 "$W/fonts/"
+          # Orokin Sale script lettering
+          npm pack @fontsource/lobster@5 --silent
+          mkdir lb && tar xzf fontsource-lobster-*.tgz -C lb
+          cp lb/package/files/lobster-latin-400-normal.woff2 "$W/fonts/"
           ls -la "$W" "$W/fonts"
 
       - name: Decode the signing key

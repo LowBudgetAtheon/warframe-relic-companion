@@ -10,6 +10,10 @@ window.WRC_SECRETS = {
   {
    "i": "7jIMWSLQe47i9anB",
    "c": "kVwnIaU-GbD9lVV4nRwJqXu5gtWhphFEEUVxel5G3gFSrAP_v073i169Av9PxEQV3pNhBm6CH2aom2TcfVkcLJFn9gpu55W_Ep2DiJMU9IEI-AGmBefejWtDD-tPysm3PnrGZulpxzPSKhSTYHSIvaKER9ssiLW6I-jgZr1bdMBylE6hWg"
+  },
+  {
+   "i": "LYf7m3u-NwqcKiIr",
+   "c": "X5lLseiCKsYcW8tEQbH1xhar0cewBswzAk6gYO1StQ0rJ4J8urxVQw140n6lP497qtNRnoVVUFqEVXM4O6s"
   }
  ]
 };
