@@ -96,7 +96,8 @@ function normaliseState(s) {
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
     hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
-    relicCounts: s.relicCounts || {}, building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
+    relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
+    building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
@@ -595,17 +596,23 @@ function renderRuns() {
   const srm = needMap(starItems);
   const hvAll = Object.entries(srm).filter(([, l]) => new Set(l.map(x => x.it)).size > 1);
   const hvSet = new Set(hvAll.map(([r]) => r));
-  const hv = hvAll.filter(([r]) => tierOk(r)).sort((a, b) =>
+  const haveCounts = Object.keys(state.relicCounts).length > 0, own = state.hvOwned;
+  const hvShown = own ? hvAll.filter(([r]) => state.relicCounts[r] > 0) : hvAll;
+  const hv = hvShown.filter(([r]) => tierOk(r)).sort((a, b) =>
     new Set(b[1].map(x => x.it)).size - new Set(a[1].map(x => x.it)).size || obtainable(b[0]) - obtainable(a[0]) || relicSort(a[0], b[0]));
-  let h = `<div class="hvpanel${state.hvMin ? " min" : ""}" id="hvPanel"><div class="hvhead" id="hvHead"><h2 class="sec">High value${state.hvMin ? ` · ${hvAll.length}` : ""}</h2>
+  let h = `<div class="hvpanel${state.hvMin ? " min" : ""}" id="hvPanel"><div class="hvhead" id="hvHead"><h2 class="sec">High value${state.hvMin ? ` · ${hvShown.length}${own ? " owned" : ""}` : ""}</h2>
     <button class="minbtn" id="hvMin" aria-label="${state.hvMin ? "Expand" : "Minimize"}">${state.hvMin ? "+" : "–"}</button></div><div class="hvbody">
-    <p class="secsub">Relics that hold parts for two or more different starred items.</p>`;
+    <p class="secsub">Relics that hold parts for two or more different starred items.</p>
+    <div class="controls"><button class="chip ghost" id="hvOwned" aria-pressed="${own}">Owned only</button></div>`;
   h += hv.length ? `<div class="grid hv">` + hv.map(([r, l]) => {
     const n = new Set(l.map(x => x.it)).size;
     return `<article class="card"><div class="chead" style="cursor:default"><div class="name">${esc(r)}${ownRel(r)}</div>
       <div class="meta"><span class="tag">${n} starred items</span><span class="st ${stCls(r)}">${statusLabel(r)}</span></div></div>
       <div class="rlist">${l.sort((a, b) => RAR_ORDER[a.rar] - RAR_ORDER[b.rar]).map(p => `<div class="rrow"><span class="pn">${esc(p.full)}</span><span class="rar ${p.rar}">${RAR[p.rar]}</span></div>`).join("")}</div></article>`;
-  }).join("") + `</div>` : `<p class="empty">${starItems.length < 2 ? "Star at least two items to find relics that cover more than one." : "No relic holds parts for more than one of your starred items."}</p>`;
+  }).join("") + `</div>` : `<p class="empty">${starItems.length < 2 ? "Star at least two items to find relics that cover more than one."
+    : own && !haveCounts ? "Run an Inventory Scan in Settings to see which relics you own."
+    : own && hvAll.length ? "None of the relics you own hold parts for more than one of your starred items."
+    : "No relic holds parts for more than one of your starred items."}</p>`;
   h += `</div></div>`;
 
   // Fissures
@@ -652,6 +659,7 @@ function renderRuns() {
   $("#runSum").textContent = Object.keys(allRm).length;
   $("#runSub").textContent = `${new Set(Object.values(allRm).flat().map(x => x.full)).size} different parts missing across ${ITEMS.filter(active).length} items · ${hvSet.size} high-value relic${hvSet.size === 1 ? "" : "s"}`;
   $("#hvHead").addEventListener("click", () => { state.hvMin = !state.hvMin; save(); renderRuns(); });
+  $("#hvOwned").addEventListener("click", () => { state.hvOwned = !state.hvOwned; save(); renderRuns(); });
 }
 
 /* ---------- PAGE: ROTATING ---------- */
@@ -738,6 +746,7 @@ function renderDrawer() {
     <h3>Inventory Scan</h3>
     <p class="dnote">Upload a screen recording to update your relics and Prime parts.</p>
     ${[["relics", "Relics"], ["parts", "Prime parts"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
+    <div class="controls"><button class="chip ghost" id="invBtn">View inventory</button></div>
     <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
     <div class="spacer"></div>
     <h3>Enter code</h3>
@@ -757,6 +766,38 @@ function scanSay(msg, bad, busy) {
   const m = $("#scanMsg");
   if (m) { m.className = "scanmsg" + (bad ? " bad" : ""); m.innerHTML = esc(msg) + (busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""); }
   document.querySelectorAll("#drawer .filebox").forEach(f => { f.classList.toggle("off", !!busy); f.querySelector("input").disabled = !!busy; });
+}
+
+/* ---------- INVENTORY (what the last scans found) ---------- */
+let invTab = "relics";
+function showInventory() {
+  $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card invbox"><div class="chead" style="cursor:default"><div class="name">Inventory</div>
+    <div class="meta"><span class="tag">From Inventory Scan</span></div></div>
+    <div class="mbody"><div class="controls" id="invTabs"><button class="chip" data-inv="relics">Relics</button><button class="chip" data-inv="parts">Prime parts</button></div>
+    <input class="search" id="invQ" type="search" placeholder="Search" autocomplete="off">
+    <div class="invsum" id="invSum"></div><div class="invlist" id="invList"></div></div>
+    <button class="builtbtn" data-close>Done</button></article></div>`;
+  const fill = () => {
+    const isR = invTab === "relics", q = ($("#invQ").value || "").trim().toLowerCase();
+    document.querySelectorAll("#invTabs [data-inv]").forEach(b => b.setAttribute("aria-pressed", b.dataset.inv === invTab));
+    const all = Object.entries(isR ? state.relicCounts : state.partCounts).filter(([, n]) => n > 0);
+    const rows = all.filter(([k]) => !q || k.toLowerCase().includes(q)).sort((a, b) => isR ? relicSort(a[0], b[0]) : a[0].localeCompare(b[0]));
+    const at = state.scanAt[invTab], file = state.scanFiles[invTab];
+    const total = all.reduce((a, [, n]) => a + n, 0);
+    $("#invSum").innerHTML = all.length ? `${all.length} ${isR ? "relic" : "part"}${all.length === 1 ? "" : "s"} · ${total} in total${file ? `<br><span class="sub" style="margin:0">${esc(file)}${at ? `, scanned ${ago(at)}` : ""}</span>` : ""}` : "";
+    if (!all.length) { $("#invList").innerHTML = `<p class="empty">Nothing imported yet. Upload a recording of your ${isR ? "relics" : "Prime parts"} under Inventory Scan in Settings.</p>`; return; }
+    if (!rows.length) { $("#invList").innerHTML = `<p class="empty">Nothing matches that search.</p>`; return; }
+    let h = "", grp = null;
+    rows.forEach(([k, n]) => {
+      const g = isR ? tierOf(k) : null;
+      if (g !== grp) { h += `<div class="group">${esc(g)}</div>`; grp = g; }
+      h += `<div class="invrow"><span class="pn">${esc(k)}</span>${isR ? `<span class="st ${stCls(k)}">${statusLabel(k)}</span>` : ""}<b>×${n}</b></div>`;
+    });
+    $("#invList").innerHTML = h;
+  };
+  $("#invTabs").addEventListener("click", e => { const b = e.target.closest("[data-inv]"); if (!b) return; invTab = b.dataset.inv; fill(); $("#invList").scrollTop = 0; });
+  $("#invQ").addEventListener("input", fill);
+  fill();
 }
 
 /* ---------- CLEAR DATA ---------- */
@@ -792,8 +833,8 @@ function showClear() {
   draw();
 }
 function clearData(pick) {
-  if (pick.has("parts")) { state.ticks = {}; state.mastered = {}; state.building = {}; state.built = {}; delete state.scanFiles.parts; }
-  if (pick.has("relics")) { state.relicCounts = {}; delete state.scanFiles.relics; }
+  if (pick.has("parts")) { state.ticks = {}; state.mastered = {}; state.building = {}; state.built = {}; state.partCounts = {}; delete state.scanFiles.parts; delete state.scanAt.parts; }
+  if (pick.has("relics")) { state.relicCounts = {}; delete state.scanFiles.relics; delete state.scanAt.relics; }
   if (pick.has("favs")) { state.stars = {}; state.alerts = {}; }
   if (pick.has("check")) state.weekly = { t: {}, c: [] };
   if (pick.has("settings")) {
@@ -923,7 +964,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, bd: state.building, bl: Object.keys(state.built) });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, pc: state.partCounts, sa: state.scanAt, sf: state.scanFiles, ho: state.hvOwned ? 1 : 0, bd: state.building, bl: Object.keys(state.built) });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -937,7 +978,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, building: p.bd, built: set(p.bl) });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, partCounts: p.pc, scanAt: p.sa, scanFiles: p.sf, hvOwned: !!p.ho, building: p.bd, built: set(p.bl) });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -981,7 +1022,8 @@ const TOUR = [
 const WHATS_NEW = {
   id: "2026-11-b",
   items: [
-    "Inventory Scan in Settings: upload a recording of your relics or Prime parts and the app reads them. Relic counts show next to each relic.",
+    "Inventory Scan in Settings: upload a recording of your relics or Prime parts and the app reads them. Relic counts show next to each relic, and View inventory lists everything it found.",
+    "High value on Relic Runs gets an Owned only switch.",
     "Foundry tracker: items with every part move to the top of Main as Ready to build. Tap Building to start a countdown, and the app tells you when it's ready to claim.",
     "Clear data in Settings, for wiping just the parts you choose.",
     "Tidier fissure rows, a solid top bar, and cleaner How to get text.",
@@ -1146,6 +1188,7 @@ function bindEvents() {
     }
     if (e.target.id === "tourBtn") { setDrawer(false); setTimeout(showTour, 250); return; }
     if (e.target.id === "clearBtn") { setDrawer(false); setTimeout(showClear, 250); return; }
+    if (e.target.id === "invBtn") { setDrawer(false); setTimeout(showInventory, 250); return; }
     if (e.target.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); return; }
     if (e.target.id === "bkCopy") {
       const code = await makeBackup(); const ok = await copyText(code);

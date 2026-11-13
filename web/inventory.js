@@ -323,7 +323,7 @@
     const owned = [...result.entries()].filter(([, n]) => n > 0);
     if (!result.size) { scanSay("Couldn't read any relic names from that video. A clip recorded on the console reads best.", true); return; }
     state.relicCounts = Object.fromEntries(owned);
-    state.scanFiles.relics = fname; save();
+    state.scanFiles.relics = fname; state.scanAt.relics = Date.now(); save();
     const total = owned.reduce((a, [, n]) => a + n, 0);
     scanSay(`Found ${owned.length} relic${owned.length === 1 ? "" : "s"} you own (${total} in total).`);
     renderDrawer(); renderAll();
@@ -343,7 +343,8 @@
       else if (isTicked(u)) rem.push({ it, u });
     });
     add.forEach(u => { state.ticks[u.id] = 1; });
-    state.scanFiles.parts = fname; save();
+    state.partCounts = Object.fromEntries([...result.entries()].filter(([, n]) => n > 0)); // a new scan replaces the last one
+    state.scanFiles.parts = fname; state.scanAt.parts = Date.now(); save();
     scanSay(`Ticked ${add.length} new part${add.length === 1 ? "" : "s"}.${rem.length ? ` ${rem.length} to check.` : ""}`);
     renderDrawer(); renderAll();
     if (rem.length) { setDrawer(false); setTimeout(() => confirmRemovals(rem), 250); }
