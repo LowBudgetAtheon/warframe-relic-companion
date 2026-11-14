@@ -503,7 +503,7 @@ function infoHTML(it) {
 
 /* ---------- PAGE: MAIN ----------
    Two dropdowns, Base then Prime, under one pinned bar: category, search and a filter button. */
-let mainCat = "all", mainQuery = "", showMastered = false, hideDone = false;
+let mainCat = "all", mainQuery = "", showMastered = false, hideDone = false, mainSlot = ""; // mainSlot: just Primary, Secondary...
 const FILTER_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>`;
 const catsWithItems = () => CATS.filter(([k]) => k === "all" || ALL.some(it => (it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat) === k));
 function buildMain() {
@@ -513,16 +513,21 @@ function buildMain() {
       <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
       <button class="iconbtn" id="filtBtn" aria-label="Sort and filters" aria-expanded="false">${FILTER_SVG}</button></div>
       <div class="fpanel hidden" id="fpanel">
+        <div class="controls" id="slotCtl"></div>
         <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By section</button><button class="chip" data-sort="az">A–Z</button></div>
         <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
         <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button></div></div></div>
     <div id="mainList"></div>
     <footer>Data from the <a href="https://wiki.warframe.com/" target="_blank">WARFRAME Wiki</a>, DE's official drop tables and WFCD community data. Resources like Orokin Cells and credits aren't listed. To master an item you still have to level it to rank 30 after you build it.</footer>`;
   fillCats();
-  $("#catSel").addEventListener("change", e => { mainCat = e.target.value; renderMain(); $("#pg-main").scrollTop = 0; });
+  $("#catSel").addEventListener("change", e => { mainCat = e.target.value; mainSlot = ""; renderMain(); $("#pg-main").scrollTop = 0; });
   $("#filtBtn").addEventListener("click", e => {
     const p = $("#fpanel"), open = p.classList.toggle("hidden") === false;
     e.currentTarget.setAttribute("aria-expanded", open);
+  });
+  $("#slotCtl").addEventListener("click", e => {
+    const b = e.target.closest("[data-slotf]"); if (!b) return;
+    mainSlot = b.dataset.slotf; renderMain(); $("#pg-main").scrollTop = 0;
   });
   $("#sortCtl").addEventListener("click", e => {
     const b = e.target.closest("[data-sort]"); if (!b) return;
@@ -552,6 +557,7 @@ const slotOf = it => it.grp && GROUPS[it.grp] ? GROUPS[it.grp].slot : it.slot;
 function passes(it) {
   const q = mainQuery;
   if (mainCat !== "all" && catOf(it) !== mainCat) return false;
+  if (mainSlot && slotOf(it) !== mainSlot) return false;
   if (state.mastered[it.id] && !showMastered) return false;
   if (hideDone && it.k !== "m") { const { n, g } = progress(it); if (n && g === n) return false; }
   if (q && !it.n.toLowerCase().includes(q) && !(it.grp && GROUPS[it.grp] && GROUPS[it.grp].n.toLowerCase().includes(q))
@@ -602,7 +608,7 @@ const mgPool = list => list.filter(it => mainCat === "all" || catOf(it) === main
 function renderMain() {
   if (!$("#mainList")) return;
   fillCats();
-  $("#catTitle").textContent = CAT_LABEL[mainCat] || "All";
+  $("#catTitle").textContent = mainSlot || CAT_LABEL[mainCat] || "All";
   $("#catIntro").textContent = CAT_INTRO[mainCat] || "";
   let h = "";
   if (!ALL.length) h = `<p class="empty">Loading the item list…</p>`;
@@ -614,6 +620,14 @@ function renderMain() {
       <div class="bar"><i data-mgbar="${mg}" style="width:${c.tot ? 100 * c.got / c.tot : 0}%"></i></div><p class="secsub">${MG_LINE[mg]}</p></summary>
       <div class="mgbody">${open ? listHTML(mg, items) : ""}</div></details>`;
   });
+  // Weapons and Arch-weapons can be narrowed to one slot
+  const slots = SLOTTED.has(mainCat) ? SLOT_ORDER.filter(sl => ALL.some(it => catOf(it) === mainCat && slotOf(it) === sl)) : [];
+  if (!slots.includes(mainSlot)) mainSlot = "";
+  $("#slotCtl").innerHTML = slots.length ? `<span class="ctlk">Show</span>` + [["", "All"], ...slots.map(sl => [sl, sl])].map(([k, l]) => `<button class="chip" data-slotf="${k}" aria-pressed="${mainSlot === k}">${l}</button>`).join("") : "";
+  $("#slotCtl").classList.toggle("hidden", !slots.length);
+  const busy = !!mainSlot || S().mainSort === "az" || showMastered || hideDone; // a dot on the button while any filter is on
+  $("#filtBtn").classList.toggle("on", busy);
+  $("#filtBtn").setAttribute("aria-label", `Sort and filters${busy ? " (some on)" : ""}`);
   const sc = $("#sortCtl");
   sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
   $("#mainList").innerHTML = h;
@@ -1021,7 +1035,7 @@ function renderDrawer() {
       <textarea id="bkIn" placeholder="Paste a backup code here to restore" spellcheck="false"></textarea>
       <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><label class="chip ghost filechip">Restore from file<input type="file" accept=".txt,text/plain" id="bkFile" hidden></label><span class="toast" data-toast></span></div>
       <div class="controls"><button class="chip danger" id="clearBtn">Clear data</button></div>
-      <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
+      <p class="fanline">${native && native.version ? `Version ${esc(native.version())} · ` : ""}Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
     <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
   renderMR();
 }

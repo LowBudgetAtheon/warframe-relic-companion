@@ -189,6 +189,13 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        /* The app's version, shown at the bottom of Settings */
+        @JavascriptInterface
+        public String version() {
+            try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+            catch (Exception e) { return ""; }
+        }
+
         /* Save a text file (the backup) wherever the user picks, through Android's file picker */
         @JavascriptInterface
         public void saveFile(String name, String text) {
