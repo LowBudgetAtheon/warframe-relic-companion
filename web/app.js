@@ -1350,8 +1350,9 @@ function bindEvents() {
   pages.addEventListener("change", e => {
     const dk = e.target.dataset.duc;
     if (dk != null) {
-      state.ducKeep = state.ducKeep || {};
-      if (e.target.checked) delete state.ducKeep[dk]; else state.ducKeep[dk] = 1;
+      state.ducKeep = state.ducKeep || {}; state.ducPick = state.ducPick || {};
+      if (e.target.dataset.near) { if (e.target.checked) state.ducPick[dk] = 1; else delete state.ducPick[dk]; }
+      else if (e.target.checked) delete state.ducKeep[dk]; else state.ducKeep[dk] = 1;
       save(); const t = $("#ducTot"); if (t) t.innerHTML = ducatTotal(); return;
     }
     const mid = e.target.dataset.m;
@@ -1380,12 +1381,13 @@ function bindEvents() {
     }
     const vw = t.closest("[data-vw]");
     if (vw) { openVault(vw.dataset.vw); return; }
+    if (t.closest("[data-ducpanel]")) { ducPanel = !ducPanel; renderRotating(); return; }
     const dopt = t.closest("[data-ducopt]");
     if (dopt) { S()[dopt.dataset.ducopt] = !S()[dopt.dataset.ducopt]; save(); renderRotating(); return; }
     const da = t.closest("[data-ducall]");
     if (da) {
-      state.ducKeep = {};
-      if (da.dataset.ducall === "0") ducatSpares().forEach(x => { state.ducKeep[x.full] = 1; });
+      state.ducKeep = {}; state.ducPick = {};
+      ducatSpares().forEach(x => { if (da.dataset.ducall === "0") state.ducKeep[x.full] = 1; else if (x.near) state.ducPick[x.full] = 1; });
       save(); renderRotating(); return;
     }
     const rb = t.closest("[data-relic]");
@@ -1782,26 +1784,38 @@ function ducatSpares() {
     const spare = n - (reserve.get(full) || 0);
     return spare > 0 ? { full, n: spare, d: h.d, tot: spare * h.d, it: h.it } : null;
   }).filter(Boolean);
+  // How close each mastered Prime's spares come to a whole set
+  const by = new Map(list.map(x => [x.full, x]));
+  const short = it => (it.parts || []).filter(p => (by.get(p.full) || { n: 0 }).n < (p.c || 1));
+  const setOf = new Map();
+  list.forEach(x => { if (!setOf.has(x.it)) setOf.set(x.it, short(x.it)); });
   // "Hide complete sets": when the spares make a whole set, leave them for selling as a set
-  if (S().ducHideSets) {
-    const by = new Map(list.map(x => [x.full, x]));
-    const whole = new Set(list.map(x => x.it).filter(it => (it.parts || []).every(p => (by.get(p.full) || { n: 0 }).n >= (p.c || 1))));
-    list = list.filter(x => !whole.has(x.it));
-  }
+  if (S().ducHideSets) list = list.filter(x => setOf.get(x.it).length > 0);
+  // "Nearly complete": one more part would make a whole set to sell, so hold those back
+  if (S().ducNear) list.forEach(x => { const m = setOf.get(x.it); if (m.length === 1 && (x.it.parts || []).length > 1) x.near = m[0].p; });
   return list.sort(S().ducAZ ? (a, b) => a.full.localeCompare(b.full) : (a, b) => b.tot - a.tot || a.full.localeCompare(b.full));
 }
+// A row is ticked unless you unticked it; a flagged near-set row starts unticked unless you ticked it
+const ducOn = x => x.near ? !!(state.ducPick || {})[x.full] : !(state.ducKeep || {})[x.full];
+let ducPanel = false;
 function ducatHTML() {
-  const list = ducatSpares(), keep = state.ducKeep || {};
+  const list = ducatSpares();
   let h = `<div class="ducats"><h4>Spare parts for Ducats</h4><p class="secsub">Parts from your last scan that belong to Primes you've mastered, minus any still needed for others. Untick anything you want to keep; trade the rest at a Relay's Ducat kiosk.</p>`;
   if (!Object.keys(state.partCounts || {}).length) return h + `<p class="empty">Upload a Parts recording under Import Data in Settings to see what you can trade in.</p></div>`;
-  h += `<div class="controls"><button class="chip ghost" data-ducopt="ducAZ" aria-pressed="${!!S().ducAZ}">A–Z</button><button class="chip ghost" data-ducopt="ducHideSets" aria-pressed="${!!S().ducHideSets}">Hide complete sets</button></div>`;
+  const opts = [["ducAZ", "A–Z"], ["ducHideSets", "Hide complete sets"], ["ducNear", "Nearly complete"]];
+  const on = opts.filter(([k]) => S()[k]).length;
+  h += `<div class="controls ducctl"><button class="chip ghost" data-ducall="1">Select all</button><button class="chip ghost" data-ducall="0">Select none</button>
+    <button class="iconbtn ducfilt" data-ducpanel aria-label="Sort and filters${on ? ` (${on} on)` : ""}" aria-expanded="${ducPanel}">${FILTER_SVG}${on ? `<span class="fdot" aria-hidden="true"></span>` : ""}</button></div>
+    <div class="fpanel${ducPanel ? "" : " hidden"}"><div class="controls">${opts.map(([k, l]) => `<button class="chip ghost" data-ducopt="${k}" aria-pressed="${!!S()[k]}">${l}</button>`).join("")}</div>
+    ${S().ducNear ? `<p class="dnote">Flagged parts are one part away from a whole set you could sell instead. They start unticked.</p>` : ""}</div>`;
   if (!list.length) return h + `<p class="empty">${S().ducHideSets ? "Nothing spare outside complete sets." : "Nothing spare in your last scan from a Prime you've mastered."}</p></div>`;
-  h += `<div class="controls"><button class="chip ghost" data-ducall="1">Select all</button><button class="chip ghost" data-ducall="0">Select none</button></div><div class="rlist">`;
-  h += list.map(x => `<label class="rrow ducrow"><input type="checkbox" data-duc="${esc(x.full)}"${keep[x.full] ? "" : " checked"}><span class="pn">${esc(x.full)}${x.n > 1 ? ` <span class="sub" style="margin:0">x${x.n}</span>` : ""}</span><span class="pr">${x.n > 1 ? `${x.d} each · ` : ""}<b>${x.tot}</b></span></label>`).join("");
+  h += `<div class="rlist">` + list.map(x => `<label class="rrow ducrow${x.near ? " near" : ""}"><input type="checkbox" data-duc="${esc(x.full)}"${x.near ? ` data-near="1"` : ""}${ducOn(x) ? " checked" : ""}>
+    <span class="pn">${esc(x.full)}${x.n > 1 ? ` <span class="sub" style="margin:0">x${x.n}</span>` : ""}${x.near ? `<span class="neartag">1 part from a full set · needs ${esc(x.near)}</span>` : ""}</span>
+    <span class="pr">${x.n > 1 ? `${x.d} each · ` : ""}<b>${x.tot}</b></span></label>`).join("");
   return h + `</div><div class="ductot" id="ducTot">${ducatTotal(list)}</div></div>`;
 }
 function ducatTotal(list = ducatSpares()) {
-  const keep = state.ducKeep || {}, sel = list.filter(x => !keep[x.full]);
+  const sel = list.filter(ducOn);
   const parts = sel.reduce((a, x) => a + x.n, 0), d = sel.reduce((a, x) => a + x.tot, 0);
   return `Selected: <b>${parts}</b> part${parts === 1 ? "" : "s"} · <b class="gold">${d.toLocaleString()}</b> Ducats`;
 }
