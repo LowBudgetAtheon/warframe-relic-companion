@@ -63,7 +63,7 @@ const RAR = { C: "Common", U: "Uncommon", R: "Rare" };
 const RAR_ORDER = { R: 0, U: 1, C: 2 };
 const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
 const DEFAULT_SETTINGS = {
-  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, mainOpen: {}, runsOpen: {}, rotOpen: {}, hideVend: {},
+  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, mainOpen: {}, slotOpen: {}, runsOpen: {}, rotOpen: {}, hideVend: {},
   show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true, whatsnew: true },
   reduceMotion: false, compact: false, textSize: 100, startPage: 3, fissMode: "normal",
 };
@@ -113,7 +113,7 @@ function normaliseState(s) {
     hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
     relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
     building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
-    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
+    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, slotOpen: { ...(st.slotOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
 let state = loadState();
@@ -513,7 +513,7 @@ function buildMain() {
       <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
       <button class="iconbtn" id="filtBtn" aria-label="Sort and filters" aria-expanded="false">${FILTER_SVG}</button></div>
       <div class="fpanel hidden" id="fpanel">
-        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By type</button><button class="chip" data-sort="az">A–Z</button></div>
+        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By section</button><button class="chip" data-sort="az">A–Z</button></div>
         <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
         <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button></div></div></div>
     <div id="mainList"></div>
@@ -531,7 +531,7 @@ function buildMain() {
   // dropdowns (Base / Prime, weapon slots) remember whether they're open
   $("#mainList").addEventListener("toggle", e => {
     const d = e.target; if (!d.matches || mainQuery) return;
-    if (d.matches("details.secgrp")) { if (d.open) delete S().collapsed[d.dataset.slot]; else S().collapsed[d.dataset.slot] = 1; save(); }
+    if (d.matches("details.secgrp")) { S().slotOpen[d.dataset.slot] = d.open ? 1 : 0; save(); }
     if (d.matches("details.mgrp")) { S().mainOpen[d.dataset.mg] = d.open ? 1 : 0; save(); }
   }, true);
   $("#search").addEventListener("input", e => {
@@ -569,7 +569,7 @@ function entriesOf(list) {
   return [...m.values()].sort((a, b) => a.n.localeCompare(b.n));
 }
 function sectionsFor(entries) {
-  const secs = new Map(), az = mainCat === "all" && S().mainSort === "az";
+  const secs = new Map(), az = S().mainSort === "az"; // A–Z: one list, no headings, in any category
   const one = mainCat !== "all" && new Set(entries.map(e => e.slot)).size > 1;
   const key = e => az ? null : mainCat === "all" ? (SLOTTED.has(e.cat) ? `${CAT_LABEL[e.cat]} · ${e.slot || "Other"}` : CAT_LABEL[e.cat] || "Other") : one ? e.slot || "Other" : null;
   entries.forEach(e => { const k = key(e); if (!secs.has(k)) secs.set(k, { cat: e.cat, list: [] }); secs.get(k).list.push(e); });
@@ -588,7 +588,7 @@ function listHTML(mg, items) {
     const grid = `<div class="grid">${v.list.map(entryHTML).join("")}</div>`;
     const ck = `${mg}:${k}`;
     if (k && SLOTTED.has(v.cat)) {
-      const open = mainQuery || !S().collapsed[ck];
+      const open = mainQuery || S().slotOpen[ck]; // closed the first time, then as you left it
       h += `<details class="secgrp" data-slot="${esc(ck)}"${open ? " open" : ""}><summary><h2 class="sec">${esc(k)}</h2><span class="seccnt">${v.list.length}</span></summary>${grid}</details>`;
     } else h += (k ? `<h2 class="sec">${esc(k)}</h2>` : "") + grid;
   });
@@ -615,7 +615,6 @@ function renderMain() {
       <div class="mgbody">${open ? listHTML(mg, items) : ""}</div></details>`;
   });
   const sc = $("#sortCtl");
-  sc.classList.toggle("hidden", mainCat !== "all");
   sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
   $("#mainList").innerHTML = h;
   $("#mainList").querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
