@@ -890,7 +890,7 @@ function renderRuns() {
     const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<span class="flag need">${cnt} relic${cnt === 1 ? "" : "s"}</span>` : "");
     return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi"><span class="mt">${esc(f.type)}</span><small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span>${flags ? `<span class="flags">${flags}</span>` : ""}</div>`;
   }).join("")}</div>`;
-  h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} for you` : ""}` : "", body);
+  h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} relevant` : ""}` : "", body);
 
   // Everything missing
   body = `<p class="secsub">All relics for every part you still need, across every Prime you haven't mastered. Gold outline = also in High value. Teal outline = you can get it right now.</p>
