@@ -111,7 +111,7 @@ function normaliseState(s) {
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
     hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
-    relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
+    xm: s.xm || {}, relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
     building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, slotOpen: { ...(st.slotOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
@@ -508,7 +508,6 @@ const FILTER_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden=
 const catsWithItems = () => CATS.filter(([k]) => k === "all" || ALL.some(it => (it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat) === k));
 function buildMain() {
   $("#main").innerHTML = `<header><h1 id="catTitle">All</h1><p id="catIntro"></p></header>
-    <section class="summary mrbox" id="mrBox"></section>
     <div class="mbar" id="mbar"><div class="mbarrow">
       <label class="catwrap"><span class="sr">Category</span><select class="catsel" id="catSel"></select></label>
       <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
@@ -604,7 +603,6 @@ function renderMain() {
   if (!$("#mainList")) return;
   fillCats();
   $("#catTitle").textContent = CAT_LABEL[mainCat] || "All";
-  renderMR();
   $("#catIntro").textContent = CAT_INTRO[mainCat] || "";
   let h = "";
   if (!ALL.length) h = `<p class="empty">Loading the item list…</p>`;
@@ -641,16 +639,53 @@ function masteryXP(it) {
 }
 const mrNeed = r => r <= 30 ? 2500 * r * r : 2250000 + 147500 * (r - 30);
 const mrLabel = r => r > 30 ? `Legendary\u00a0${r - 30}` : `MR\u00a0${r}`; // keep "MR 10" on one line
+/* Mastery that doesn't come from levelling gear: Star Chart and Steel Path nodes and Junctions,
+   Railjack and Drifter Intrinsics. Node totals are the wiki's (Update 42): 241 nodes worth 14,569
+   points plus 13 Junctions at 1,000 each, on each chart. Every Intrinsic rank is worth 1,500. */
+const XM = {
+  charts: [["sc", "Star Chart"], ["sp", "Steel Path"]], NODES: 241, NODE_PTS: 14569, JUNCTIONS: 13,
+  intr: [["rj", "Railjack Intrinsics", ["Tactical", "Piloting", "Gunnery", "Engineering", "Command"]],
+         ["dr", "Drifter Intrinsics", ["Combat", "Riding", "Opportunity", "Endurance"]]],
+};
+const xmGet = (k, f) => Math.max(0, +(((state.xm || {})[k] || {})[f]) || 0);
+function extraXP() {
+  const out = {};
+  XM.charts.forEach(([k]) => {
+    const n = Math.min(XM.NODES, xmGet(k, "n")), j = Math.min(XM.JUNCTIONS, xmGet(k, "j"));
+    out[k] = Math.round(n * XM.NODE_PTS / XM.NODES) + j * 1000;
+  });
+  XM.intr.forEach(([k, , trees]) => { out[k] = trees.reduce((a, t) => a + Math.min(10, xmGet(k, t)) * 1500, 0); });
+  return out;
+}
 function renderMR() {
   const box = $("#mrBox"); if (!box) return;
-  let xp = 0, n = 0;
-  ALL.forEach(it => { if (state.mastered[it.id]) { xp += masteryXP(it); n++; } });
+  let items = 0, n = 0;
+  ALL.forEach(it => { if (state.mastered[it.id]) { items += masteryXP(it); n++; } });
+  const ex = extraXP(), extra = Object.values(ex).reduce((a, b) => a + b, 0), xp = items + extra;
   let r = 0; while (mrNeed(r + 1) <= xp) r++;
-  const lo = mrNeed(r), hi = mrNeed(r + 1), max = ALL.reduce((a, it) => a + masteryXP(it), 0);
+  const lo = mrNeed(r), hi = mrNeed(r + 1);
   box.innerHTML = `<div class="sumrow"><span>Estimated Mastery Rank</span><b>${mrLabel(r)}</b></div>
-    <div class="sumsub">${xp.toLocaleString()} mastery points from ${n} item${n === 1 ? "" : "s"} · ${(hi - xp).toLocaleString()} more to ${mrLabel(r + 1)}</div>
+    <div class="sumsub">${xp.toLocaleString()} mastery points · ${(hi - xp).toLocaleString()} more to ${mrLabel(r + 1)}</div>
     <div class="bar"><i style="width:${Math.min(100, 100 * (xp - lo) / (hi - lo))}%"></i></div>
-    <p class="secsub">Counts everything you've marked Mastered (${max.toLocaleString()} points if you master it all). Star Chart nodes, Junctions and Intrinsics give points too, so your real rank may be higher.</p>`;
+    <div class="mrsplit"><span>Items mastered (${n})</span><b>${items.toLocaleString()}</b>
+      ${XM.charts.map(([k, l]) => `<span>${l}</span><b>${ex[k].toLocaleString()}</b>`).join("")}
+      <span>Intrinsics</span><b>${(ex.rj + ex.dr).toLocaleString()}</b></div>`;
+}
+function xmSet(t, tidy) {
+  const max = +t.max || 0, v = Math.max(0, Math.min(max, Math.floor(+t.value || 0)));
+  state.xm = state.xm || {}; (state.xm[t.dataset.xm] = state.xm[t.dataset.xm] || {})[t.dataset.xf] = v;
+  if (tidy && t.value !== "" && +t.value !== v) t.value = v;
+  save(); renderMR();
+}
+function mrSecHTML() {
+  const num = (k, f, max, label) => `<div class="drow xmrow"><label for="xm-${k}-${f}">${label}</label><input id="xm-${k}-${f}" type="number" inputmode="numeric" min="0" max="${max}" value="${xmGet(k, f) || ""}" placeholder="0" data-xm="${k}" data-xf="${f}"><span class="xmmax">/ ${max}</span></div>`;
+  return `<details class="dsec" id="mrSec"><summary>Mastery Rank</summary><div class="dbody">
+    <div class="summary mrbox" id="mrBox"></div>
+    <p class="dnote">Items count once you mark them Mastered on Main. Add the rest below; your profile in the game shows how much of each chart you've cleared.</p>
+    ${XM.charts.map(([k, l]) => `<h4>${l}</h4>${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
+    ${XM.intr.map(([k, l, trees]) => `<h4>${l}</h4>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
+    <p class="dnote">Each node pays once the first time you clear it, and again on the Steel Path; each Junction pays 1,000. Every Intrinsic rank pays 1,500, up to rank 10 in each tree. Node points vary a little from node to node, so partial charts are an estimate.</p>
+  </div></details>`;
 }
 function mainSummary() {
   renderMR();
@@ -967,6 +1002,7 @@ function renderDrawer() {
       <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
       <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
     </div></details>
+    ${mrSecHTML()}
     <details class="dsec"><summary>Import Data</summary><div class="dbody">
       <h4>Inventory Scan</h4>
       <p class="dnote">Upload a screen recording to update your relics and parts.</p>
@@ -987,6 +1023,7 @@ function renderDrawer() {
       <div class="controls"><button class="chip danger" id="clearBtn">Clear data</button></div>
       <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
     <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
+  renderMR();
 }
 const VENDORS = [["baro", "Void Trader"], ["darvo", "Darvo"], ["teshin", "Teshin (Steel Path Honors)"], ["circuit", "Steel Path Circuit"], ["varzia", "Varzia"]];
 async function saveBackupFile(btn) {
@@ -1204,7 +1241,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, pc: state.partCounts, sa: state.scanAt, sf: state.scanFiles, ho: state.hvOwned ? 1 : 0, bd: state.building, bl: Object.keys(state.built) });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, pc: state.partCounts, sa: state.scanAt, sf: state.scanFiles, ho: state.hvOwned ? 1 : 0, bd: state.building, bl: Object.keys(state.built), xm: state.xm });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -1218,7 +1255,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, partCounts: p.pc, scanAt: p.sa, scanFiles: p.sf, hvOwned: !!p.ho, building: p.bd, built: set(p.bl) });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, partCounts: p.pc, scanAt: p.sa, scanFiles: p.sf, hvOwned: !!p.ho, building: p.bd, built: set(p.bl), xm: p.xm });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -1362,7 +1399,7 @@ function afterIntro() {
 let renderQueued = 0;
 function renderAll() {
   refreshLiveSets();
-  renderMain(); renderFavs(); renderRuns(); renderRotating(); renderUpdated();
+  renderMain(); renderFavs(); renderRuns(); renderRotating(); renderUpdated(); renderMR();
 }
 function queueDerived() { // after a tick: refresh lists that depend on missing parts
   clearTimeout(renderQueued);
@@ -1512,10 +1549,12 @@ function bindEvents() {
       state = next; save(); decoFor = undefined; renderWeekly(); applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
     }
   });
+  dr.addEventListener("input", e => { if (e.target.dataset.xm) xmSet(e.target, false); }); // the estimate updates as you type
   dr.addEventListener("change", e => {
     const t = e.target;
     if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
     if (t.dataset.disp) { S()[t.dataset.disp] = t.checked; save(); applyDisplay(); return; }
+    if (t.dataset.xm) { xmSet(t, true); return; }
     if (t.dataset.vend) { if (t.checked) delete S().hideVend[t.dataset.vend]; else S().hideVend[t.dataset.vend] = 1; save(); renderRotating(); return; }
     if (t.id === "bkFile" && t.files && t.files[0]) {
       const f = t.files[0]; t.value = "";
@@ -1599,6 +1638,7 @@ let drawerOpen = false, weeklyOpen = false;
 function setDrawer(open) {
   drawerOpen = open;
   if (open && weeklyOpen) setWeekly(false);
+  if (open) renderMR();
   document.body.classList.toggle("drawer-open", open);
   $("#drawer").style.transform = ""; $("#scrim").style.opacity = "";
   if (!open) document.activeElement && document.activeElement.blur && document.activeElement.blur();
