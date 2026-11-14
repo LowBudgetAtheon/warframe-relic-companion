@@ -1005,8 +1005,8 @@ function renderDrawer() {
     ${mrSecHTML()}
     <details class="dsec"><summary>Import Data</summary><div class="dbody">
       <h4>Inventory Scan</h4>
-      <p class="dnote">Upload a screen recording to update your relics and parts.</p>
-      ${[["relics", "Relics"], ["parts", "Parts"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
+      <p class="dnote">Upload a screen recording to update your relics, parts or mastery. For Mastery, record the Codex sorted by rank.</p>
+      ${[["relics", "Relics"], ["parts", "Parts"], ["mastery", "Mastery"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
       <div class="controls"><button class="chip ghost" id="invBtn">View inventory</button></div>
       <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
     </div></details>

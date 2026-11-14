@@ -33,7 +33,7 @@
   const CORE = { "0": "O", Q: "O", D: "O", "©": "O", "@": "O", "1": "I", L: "I", "!": "I", "|": "I", J: "I", T: "I", "7": "I", "5": "S", "8": "S", B: "S", "$": "S", "2": "Z", "6": "G", "9": "G", "4": "A" };
   const WIDE = { ...CORE, E: "F", P: "F", R: "F", H: "N", M: "N", U: "O", V: "Y", C: "O", K: "X" }; // for long names, where the rest of the word carries it
   const shape = (s, wide) => String(s).toUpperCase().split("").map(c => (wide ? WIDE : CORE)[c] || c).join("");
-  const letters = s => String(s).toUpperCase().replace(/[^A-Z ]+/g, "").replace(/\s+/g, " ").trim();
+  const letters = (s, digits) => String(s).toUpperCase().replace(digits ? /[^A-Z0-9 ]+/g : /[^A-Z ]+/g, digits ? " " : "").replace(/\s+/g, " ").trim();
   const median = a => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
   const box = w => ({ x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 });
   const mode = (list, low) => { // most common value; ties go to the larger number (or smaller, with low)
@@ -129,10 +129,10 @@
   }
 
   /* ---------- Prime parts ---------- */
-  function partIndex(names) {
+  function partIndex(names, digits) {
     const byFirst = new Map();
     names.forEach(full => {
-      const L = letters(full), first = L.split(" ")[0];
+      const L = letters(full, digits), first = L.split(" ")[0];
       (byFirst.get(first) || byFirst.set(first, []).get(first)).push({ full, L, S: shape(L, true) });
     });
     return byFirst;
@@ -157,8 +157,8 @@
     });
     return blocks.map(b => ({ box: b, text: b.segs.map(s => s.words.map(w => w.text).join(" ")).join(" ") }));
   }
-  function matchPart(text, idx, cache) {
-    const L = letters(text);
+  function matchPart(text, idx, cache, digits) {
+    const L = letters(text, digits);
     if (cache.has(L)) return cache.get(L);
     let best = null, bd = Infinity;
     const toks = L.split(" ").filter(Boolean);
@@ -189,6 +189,69 @@
     return out;
   }
 
+  /* ---------- Codex: which items show the mastery icon ----------
+     Each Codex tile has its name on a white bar, and a green mastery icon in its top-right
+     corner once the item is mastered. Find the icons as small green blobs, then give each
+     one to the name below and to the left of it. */
+  function greenBlobs(img) {
+    const W = img.width, H = img.height, d = img.data, step = 2, w = Math.ceil(W / step), h = Math.ceil(H / step);
+    const m = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const k = ((y * step) * W + x * step) * 4, r = d[k], g = d[k + 1], b = d[k + 2];
+      if (g > 140 && g > r + 40 && b > 90) m[y * w + x] = 1;
+    }
+    const out = [], seen = new Uint8Array(w * h), st = [];
+    for (let i = 0; i < w * h; i++) {
+      if (!m[i] || seen[i]) continue;
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, n = 0; st.push(i); seen[i] = 1;
+      while (st.length) {
+        const j = st.pop(), x = j % w, y = (j / w) | 0; n++;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        for (const q of [j - 1, j + 1, j - w, j + w]) if (q >= 0 && q < w * h && m[q] && !seen[q] && Math.abs((q % w) - x) <= 1) { seen[q] = 1; st.push(q); }
+      }
+      out.push({ x0: x0 * step, y0: y0 * step, x1: (x1 + 1) * step, y1: (y1 + 1) * step, n: n * step * step });
+    }
+    return out;
+  }
+  // a Codex name sits on a white bar: most of the pixels around its text are bright
+  function onLabel(img, b, h) {
+    const W = img.width, d = img.data, x0 = Math.max(0, Math.round(b.x0 - 0.4 * h)), x1 = Math.min(W - 1, Math.round(b.x1 + 0.4 * h));
+    const y0 = Math.max(0, Math.round(b.y0 - 0.25 * h)), y1 = Math.min(img.height - 1, Math.round(b.y1 + 0.25 * h));
+    let n = 0, br = 0;
+    for (let y = y0; y <= y1; y += 2) for (let x = x0; x <= x1; x += 2) { const k = (y * W + x) * 4; n++; if (d[k] + d[k + 1] + d[k + 2] > 540) br++; }
+    return n && br / n > 0.35;
+  }
+  function masteryInFrame(words, img, idx, cache) {
+    const ws = words.filter(w => /[A-Za-z0-9]{2}/.test(w.text));
+    const h = median(ws.map(w => w.bbox.y1 - w.bbox.y0)) || 20;
+    const blocks = blocksOf(ws, h).filter(b => onLabel(img, b.box, h)).map(b => ({ ...b, n: matchPart(b.text, idx, cache, true) })).filter(b => b.n);
+    if (!blocks.length) return [];
+    // tile width: the usual gap between names on the same row
+    // tile width: for each name, the gap to the nearest name to its right on the same row
+    const gaps = [];
+    blocks.forEach(a => {
+      let g = Infinity;
+      blocks.forEach(b => { const dx = b.box.x0 - a.box.x0; if (dx > 3 * h && Math.abs(b.box.y0 - a.box.y0) < 2 * h && dx < g) g = dx; });
+      if (g < Infinity) gaps.push(g);
+    });
+    const S = gaps.length >= 3 ? median(gaps) : img.width * 0.12;
+    const icons = greenBlobs(img).filter(c => { const cw = c.x1 - c.x0, ch = c.y1 - c.y0; return cw > 0.05 * S && cw < 0.3 * S && ch > 0.05 * S && ch < 0.3 * S && cw / ch < 2.2 && ch / cw < 2.2; });
+    const got = new Set();
+    icons.forEach(c => {
+      const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2;
+      let best = null, bd = Infinity;
+      blocks.forEach((b, i) => {
+        const dy = b.box.y0 - cy;
+        if (cx < b.box.x0 - 0.15 * S || cx > b.box.x0 + 1.15 * S || dy < 0.3 * S || dy > 1.4 * S) return;
+        if (dy < bd) { bd = dy; best = i; }
+      });
+      if (best != null) got.add(best);
+    });
+    // a tile whose top is cut off (under the header or the screen edge) can't show its icon: no vote
+    const top = Math.max(img.height * 0.12, 0);
+    return blocks.map((b, i) => ({ name: b.n, m: got.has(i), sure: got.has(i) || b.box.y0 - 0.95 * S > top })).filter(x => x.sure);
+  }
+
   /* ---------- frames ---------- */
   const wait = (el, ev, ms) => new Promise(ok => { const t = setTimeout(ok, ms); el.addEventListener(ev, () => { clearTimeout(t); ok(); }, { once: true }); });
   async function openVideo(file) {
@@ -208,23 +271,24 @@
     return (x1 - x0) * (y1 - y0) < W * H * 0.15 ? { x: 0, y: 0, w: W, h: H } : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }
   /* Dark text on white: a pixel is text when it's clearly brighter than its surroundings. */
-  function threshold(src, W, H) {
+  function threshold(src, W, H, dark) {
     const s = src.data, L = new Float32Array(W * H), I = new Float64Array((W + 1) * (H + 1));
     for (let i = 0; i < W * H; i++) L[i] = s[i * 4] * 0.3 + s[i * 4 + 1] * 0.59 + s[i * 4 + 2] * 0.11;
     for (let y = 0; y < H; y++) { let r = 0; for (let x = 0; x < W; x++) { r += L[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + r; } }
-    const R = Math.max(8, Math.round(W / 100)), out = new ImageData(W, H), o = out.data;
+    // dark: black names on white bars (the Codex); otherwise light text on a dark UI
+    const R = dark ? Math.max(6, Math.round(W / 213)) : Math.max(8, Math.round(W / 100)), out = new ImageData(W, H), o = out.data;
     for (let y = 0; y < H; y++) {
       const ya = Math.max(0, y - R), yb = Math.min(H, y + R + 1);
       for (let x = 0; x < W; x++) {
         const xa = Math.max(0, x - R), xb = Math.min(W, x + R + 1);
         const mean = (I[yb * (W + 1) + xb] - I[ya * (W + 1) + xb] - I[yb * (W + 1) + xa] + I[ya * (W + 1) + xa]) / ((yb - ya) * (xb - xa));
-        const v = L[y * W + x], txt = v > mean + 35 && v > 110, k = (y * W + x) * 4;
+        const v = L[y * W + x], txt = dark ? v < 110 && mean > 140 : v > mean + 35 && v > 110, k = (y * W + x) * 4;
         o[k] = o[k + 1] = o[k + 2] = txt ? 0 : 255; o[k + 3] = 255;
       }
     }
     return out;
   }
-  async function* frames(file) {
+  async function* frames(file, dark) {
     const v = await openVideo(file);
     try {
       const dur = v.duration, n = Math.max(1, Math.min(MAX_FRAMES, Math.floor(dur / STEP_S)));
@@ -247,7 +311,7 @@
         ctx.drawImage(v, bb.x * f, bb.y * f, bb.w * f, bb.h * f, 0, 0, cw, ch);
         const color = ctx.getImageData(0, 0, cw, ch);
         const bw = document.createElement("canvas"); bw.width = cw; bw.height = ch;
-        bw.getContext("2d").putImageData(threshold(color, cw, ch), 0, 0);
+        bw.getContext("2d").putImageData(threshold(color, cw, ch, dark), 0, 0);
         yield { bw, color, i, n };
       }
     } finally { URL.revokeObjectURL(v.src); v.removeAttribute("src"); v.load(); }
@@ -291,7 +355,7 @@
   async function runScan(kind, file) {
     if (SCAN_UI.busy) return;
     cancelled = false;
-    const label = kind === "relics" ? "relics" : "parts";
+    const label = { relics: "relics", parts: "parts", mastery: "the Codex" }[kind];
     scanSay("Getting ready…", false, true);
     try {
       if (!ALL.length) throw new Error("data");
@@ -305,25 +369,59 @@
         if (it.b && !/ Blueprint$/.test(u.full)) { names.add(`${u.full} Blueprint`); alias.set(`${u.full} Blueprint`, u.full); }
       }));
       const pIdx = partIndex([...names]), cache = new Map();
+      const iIdx = kind === "mastery" ? partIndex(ALL.filter(counts).map(it => it.n), true) : null;
       const seen = new Map(); // name -> [counts seen in each frame]
-      for await (const f of frames(file)) {
+      for await (const f of frames(file, kind === "mastery")) {
         if (cancelled) break;
         scanSay(`Reading ${label}… ${Math.round(100 * f.i / f.n)}%`, false, true);
         const { data } = await w.recognize(f.bw, {}, { text: false, blocks: true });
         const words = wordsOf(data), frame = new Map();
-        if (kind === "relics") {
+        if (kind === "mastery") masteryInFrame(words, f.color, iIdx, cache).forEach(x => frame.set(x.name, x.m ? 1 : 0));
+        else if (kind === "relics") {
           const list = relicsInFrame(words, relIdx, ownedSampler(f.color));
           settleOrder(list, (a, b) => (tierOf(a) === tierOf(b) ? relicSort(a, b) : 0)).forEach((n, i) => { if (n) frame.set(n, (frame.get(n) || 0) + list[i].n); });
         } else partsInFrame(words, pIdx, cache).forEach(p => { const f = alias.get(p.full) || p.full; frame.set(f, (frame.get(f) || 0) + p.n); });
         frame.forEach((n, k) => (seen.get(k) || seen.set(k, []).get(k)).push(n));
       }
       if (cancelled) { scanSay("Scan cancelled."); return; }
+      if (kind === "mastery") { // icon seen in at least half the frames that showed the item
+        finishMastery(new Map([...seen.entries()].map(([k, l]) => [k, l.filter(Boolean).length * 2 >= l.length])), file.name); return;
+      }
       const result = new Map([...seen.entries()].map(([k, l]) => [k, mode(l, kind !== "relics")]));
       if (kind === "relics") finishRelics(result, file.name); else finishParts(result, file.name);
     } catch (e) {
       const why = { video: "This phone couldn't open that video. Try recording at 1080p or 4K.", ocr: "The text reader didn't load. Try updating the app.", data: "Wait for the Prime list to load, then try again." }[e.message];
       scanSay(why || "Something went wrong reading that video.", true);
     }
+  }
+  /* The scan lists what it thinks is NOT mastered for you to check; everything else it saw gets
+     marked Mastered once you confirm. */
+  function finishMastery(result, fname) {
+    const seen = [...result.entries()].map(([n, m]) => ({ it: BYNAME[n], m })).filter(x => x.it);
+    if (!seen.length) { scanSay("Couldn't read any item names from that video. Try a recording of the Codex on the console.", true); return; }
+    const notM = seen.filter(x => !x.m).sort((a, b) => a.it.n.localeCompare(b.it.n));
+    state.scanFiles.mastery = fname; state.scanAt.mastery = Date.now(); save();
+    scanSay(`Read ${seen.length} items: ${seen.length - notM.length} mastered. Check the rest, then confirm.`);
+    renderDrawer(); setDrawer(false);
+    setTimeout(() => {
+      $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">Not mastered?</div>
+        <div class="meta"><span class="tag">Codex scan</span><span class="cnt">${seen.length - notM.length} mastered · ${notM.length} not</span></div></div>
+        <div class="mbody"><p>The scan saw these without the mastery icon. Tick any that are actually mastered. Everything else it read (${seen.length - notM.length} items) will be marked Mastered.</p>
+        <div class="remlist">${notM.length ? notM.map((x, i) => `<label class="tgl"><span>${esc(x.it.n)}${state.mastered[x.it.id] ? ` <span class="sub" style="margin:0">mastered in the app</span>` : ""}</span><input type="checkbox" data-nm="${i}"></label>`).join("") : `<p class="empty">Everything it read is mastered.</p>`}</div></div>
+        <div class="tourbtns"><button class="chip ghost" data-close>Cancel</button><button class="chip" id="mGo">Confirm</button></div></article></div>`;
+      $("#mGo").addEventListener("click", () => {
+        const snap = snapState(), fix = new Set();
+        document.querySelectorAll("[data-nm]").forEach(c => { if (c.checked) fix.add(+c.dataset.nm); });
+        let on = 0, off = 0;
+        seen.filter(x => x.m).forEach(x => { if (!state.mastered[x.it.id]) on++; state.mastered[x.it.id] = 1; clearBuild(x.it.id); });
+        notM.forEach((x, i) => {
+          if (fix.has(i)) { if (!state.mastered[x.it.id]) on++; state.mastered[x.it.id] = 1; clearBuild(x.it.id); }
+          else if (state.mastered[x.it.id]) { delete state.mastered[x.it.id]; off++; }
+        });
+        save(); closeModal(); renderAll();
+        offerUndo(`Marked ${on} mastered${off ? `, unmarked ${off}` : ""}`, snap);
+      });
+    }, 250);
   }
   function finishRelics(result, fname) {
     const owned = [...result.entries()].filter(([, n]) => n > 0);
@@ -373,6 +471,7 @@
   if (typeof window !== "undefined") {
     window.runScan = runScan;
     window.cancelScan = () => { cancelled = true; };
+    window.__finishMastery = finishMastery; // for tests
   }
-  if (typeof module !== "undefined") module.exports = { lev, shape, letters, countOf, badgeFor, tierOfWord, relicIndex, relicsInFrame, settleOrder, partIndex, blocksOf, matchPart, partsInFrame, mode };
+  if (typeof module !== "undefined") module.exports = { masteryInFrame, greenBlobs, onLabel, lev, shape, letters, countOf, badgeFor, tierOfWord, relicIndex, relicsInFrame, settleOrder, partIndex, blocksOf, matchPart, partsInFrame, mode };
 })();
