@@ -508,6 +508,7 @@ const FILTER_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden=
 const catsWithItems = () => CATS.filter(([k]) => k === "all" || ALL.some(it => (it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat) === k));
 function buildMain() {
   $("#main").innerHTML = `<header><h1 id="catTitle">All</h1><p id="catIntro"></p></header>
+    <section class="summary mrbox" id="mrBox"></section>
     <div class="mbar" id="mbar"><div class="mbarrow">
       <label class="catwrap"><span class="sr">Category</span><select class="catsel" id="catSel"></select></label>
       <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
@@ -603,6 +604,7 @@ function renderMain() {
   if (!$("#mainList")) return;
   fillCats();
   $("#catTitle").textContent = CAT_LABEL[mainCat] || "All";
+  renderMR();
   $("#catIntro").textContent = CAT_INTRO[mainCat] || "";
   let h = "";
   if (!ALL.length) h = `<p class="empty">Loading the item list…</p>`;
@@ -626,7 +628,32 @@ function fillMg(d) {
   body.innerHTML = listHTML(mg, mgPool(mg === "base" ? BASE : ITEMS).filter(passes));
   body.querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
 }
+/* ---------- MASTERY RANK ESTIMATE ----------
+   Mastery points for each item marked Mastered: weapons 3,000 (Kuva, Tenet and Coda weapons
+   and the Paracesis 4,000 at rank 40); Warframes, companions, Archwings and K-Drives 6,000;
+   Necramechs 8,000 at rank 40. MR n needs 2,500 × n²; each Legendary rank 147,500 more. */
+function masteryXP(it) {
+  if (it.k === "t") return 0;
+  if (/^(Kuva|Tenet|Coda) /.test(it.n) || it.n === "Paracesis") return 4000;
+  if (it.slot === "Necramech") return 8000;
+  if (it.w || ["weapons", "archweapons", "modweapons", "amps"].includes(it.cat)) return 3000;
+  return 6000;
+}
+const mrNeed = r => r <= 30 ? 2500 * r * r : 2250000 + 147500 * (r - 30);
+const mrLabel = r => r > 30 ? `Legendary ${r - 30}` : `MR ${r}`;
+function renderMR() {
+  const box = $("#mrBox"); if (!box) return;
+  let xp = 0, n = 0;
+  ALL.forEach(it => { if (state.mastered[it.id]) { xp += masteryXP(it); n++; } });
+  let r = 0; while (mrNeed(r + 1) <= xp) r++;
+  const lo = mrNeed(r), hi = mrNeed(r + 1), max = ALL.reduce((a, it) => a + masteryXP(it), 0);
+  box.innerHTML = `<div class="sumrow"><span>Estimated Mastery Rank</span><b>${mrLabel(r)}</b></div>
+    <div class="sumsub">${xp.toLocaleString()} mastery points from ${n} item${n === 1 ? "" : "s"} · ${(hi - xp).toLocaleString()} more to ${mrLabel(r + 1)}</div>
+    <div class="bar"><i style="width:${Math.min(100, 100 * (xp - lo) / (hi - lo))}%"></i></div>
+    <p class="secsub">Counts everything you've marked Mastered (${max.toLocaleString()} points if you master it all). Star Chart nodes, Junctions and Intrinsics give points too, so your real rank may be higher.</p>`;
+}
 function mainSummary() {
+  renderMR();
   [["base", BASE], ["prime", ITEMS]].forEach(([mg, list]) => {
     const el = document.querySelector(`[data-mgc="${mg}"]`); if (!el) return;
     const c = mgCount(mgPool(list));
