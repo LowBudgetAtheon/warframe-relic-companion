@@ -877,3 +877,6 @@ body.reduce-motion .undobar,body.reduce-motion .upbtn{transition:none}
 .fdot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--gold2)}
 .ducrow.near{background:color-mix(in srgb,var(--gold) 9%,transparent);border-radius:8px;outline:1px solid var(--gold);outline-offset:-1px;padding:6px 8px;margin:4px 0}
 .neartag{display:block;font-size:11.5px;color:var(--gold2);margin-top:2px}
+/* a dot on Main's filter button while a filter or sort is on */
+#filtBtn{position:relative}
+#filtBtn.on::after{content:"";position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--gold2)}
