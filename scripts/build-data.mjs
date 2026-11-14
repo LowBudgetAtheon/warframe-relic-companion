@@ -547,6 +547,7 @@ const MOD_GROUPS = {
   Vulpaphylas: ["modcompanions", "Vulpaphylas", "Each Vulpaphyla type counts once for mastery, whatever its mutagen and antigen."],
   Kubrows: ["companions", "Kubrows", "Each breed counts once for mastery. Tick a breed once you've mastered one."],
   Kavats: ["companions", "Kavats", "Each breed counts once for mastery. Tick a breed once you've mastered one."],
+  "Hound weapons": ["modcompanions", "Hound weapons", "Each Hound weapon counts once for mastery, like any other weapon."],
 };
 const TAURON = [["Cogron", "Unairu"], ["Lorak", "Zenurik"], ["Nidri", "Vazarin"], ["Thara", "Madurai"], ["Vexoric", "Naramon"]];
 const SPECIAL_GET = [
@@ -562,6 +563,7 @@ function modGroupOf(x, f) {
   if (/InfKitGun\/Barrels\//.test(u)) return "Kitguns"; // Sporelacer, Vermisplicer
   if (t === "Amp" && / Prism$/.test(n)) return "Amps";
   if (t === "K-Drive Component") return x.masterable ? "K-Drives" : null;
+  if (f === "SentinelWeapons" && /ZanukaPets/.test(u)) return "Hound weapons"; // Akaten, Batoten, Lacerten
   if (f === "Pets") {
     if (/ Hound$/.test(n)) return "Hounds";
     if (/ Moa$/.test(n)) return "MOAs";
@@ -618,7 +620,7 @@ async function buildBase(lists, comps, primeNames) {
   // How to get: wiki text from the cache, a batch refreshed each run; WFCD-based text otherwise
   const cache = await readJSON(ACQ_CACHE, {});
   const now = Date.now(), stale = e => !e || now - Date.parse(e.at || 0) > ACQ_MAX_AGE_D * 864e5;
-  const want = [...raw.map(r => r.x.name), ...TAURON.map(([a]) => a)];
+  const want = [...raw.map(r => r.x.name), ...TAURON.map(([a]) => a), "Plexus"];
   const todo = want.filter(n => stale(cache[n])).sort((a, b) => Date.parse((cache[a] || {}).at || 0) - Date.parse((cache[b] || {}).at || 0)).slice(0, NO_WIKI ? 0 : ACQ_PER_RUN);
   let fetched = 0;
   for (const n of todo) { const t = await wikiAcquisition(n); cache[n] = { t: t || (cache[n] || {}).t || null, at: new Date().toISOString() }; if (t) fetched++; }
@@ -636,6 +638,7 @@ async function buildBase(lists, comps, primeNames) {
     it.get = getOf(x);
     if (mg) {
       it.k = "m";
+      if (mg === "Hound weapons") it.w = 1; // weapons: 3,000 mastery
       const [gcat, gslot, gnote] = MOD_GROUPS[mg];
       it.grp = addGroup("g-" + slug(mg), { n: mg, cat: gcat, slot: gslot, kind: "mod", note: gnote });
       it.get = getOf(x);
@@ -666,6 +669,9 @@ async function buildBase(lists, comps, primeNames) {
     } else if (primeNames.has(`${x.name} Prime`)) it.prime = `${x.name} Prime`;
     items.push(it);
   }
+  // The Plexus (Railjack) gives mastery but isn't in WFCD's lists
+  if (!items.some(i => i.n === "Plexus")) items.push({ id: "plexus", n: "Plexus", cat: "vehicles", slot: "Plexus", b: 1, own: 1,
+    get: (cache.Plexus && cache.Plexus.t) || "Comes with your Railjack, the first time you build one. It ranks up as you play Railjack missions.", wiki: "https://wiki.warframe.com/w/Plexus" });
   for (const [a, school] of TAURON) {
     const it = { id: slug(`tauron ${a}`), n: a, cat: "tauron", slot: "Tauron Strike", b: 1, k: "t" };
     it.get = (cache[a] && cache[a].t) || `Sold by Marie in La Cathédrale once you've finished The Old Peace. Unlocks the ${school} Tauron Strike.`;

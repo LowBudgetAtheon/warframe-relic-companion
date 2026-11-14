@@ -858,6 +858,19 @@ body.reduce-motion .undobar,body.reduce-motion .upbtn{transition:none}
 .ducrow .pr b{color:var(--gold2)}
 .ductot{margin-top:10px;padding:10px 12px;border:1px solid var(--gold);border-radius:8px;font-size:14px;text-align:right}
 .ductot .gold{color:var(--gold2);font-size:16px}
+
+/* ---------- Mastery Rank (Settings) ---------- */
+#drawer .mrbox{margin:4px 0 8px}
+.mrsplit{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin-top:10px;font-size:13px;color:var(--muted)}
+.mrsplit b{color:var(--text);font-weight:600;text-align:right}
+.xmrow{gap:8px}
+.xmrow input{width:58px;flex:none;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;padding:8px 10px;min-height:40px;text-align:right}
+.xmrow label{flex:1;min-width:0}
+.xmmax{flex:none;color:var(--muted);font-size:12.5px;white-space:nowrap}
+.xmhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.xmhead h4{margin:0}
+.xmhead .chip{padding:4px 12px;min-height:34px}
+
 /* Ducat list filter + near-set flag */
 .ducctl{align-items:center}
 .ducctl .ducfilt{margin-left:auto;position:relative}

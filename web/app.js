@@ -46,24 +46,24 @@ const CAT_INTRO = {
   all: "Everything that counts toward mastery. Base holds the regular versions and their variants; Prime holds every Prime set. Tap a star to add something to Favorites.",
   warframes: "Every Warframe. Tap a card's parts as you collect them, then Mastered once it's rank 30.",
   weapons: "Primary, Secondary and Melee weapons. Variants like MK1, Vandal, Wraith and Kuva sit in their base weapon's card.",
-  vehicles: "Archwings, Necramechs and K-Drives.",
+  vehicles: "Archwings, Necramechs, K-Drives and the Railjack's Plexus.",
   archweapons: "Arch-guns and Arch-melee, used with your Archwing and Necramech.",
   companions: "Sentinels and their weapons, Kubrows and Kavats.",
   modweapons: "Zaws from Cetus and Kitguns from Fortuna and the Necralisk. Only one piece of each counts for mastery.",
-  modcompanions: "Hounds, MOAs, Predasites and Vulpaphylas, built from parts. Only one piece of each counts for mastery.",
+  modcompanions: "Hounds and their weapons, MOAs, Predasites and Vulpaphylas, built from parts. Only one piece of each counts for mastery.",
   amps: "Operator Amps, built from parts at Cetus and Fortuna, plus the Drifter's Sirocco.",
   tauron: "The five Tektolyst Artifacts and their Tauron Strikes. These don't count toward mastery; the ticks are just for your collection.",
 };
 const MG_LINE = { base: "Regular versions of everything that gives mastery, with their variants in the same card.", prime: "Every Prime set, with the relics that drop its parts." };
 const PRIME_CAT = { archgun: "archweapons", archmelee: "archweapons", archwing: "vehicles" };
 const SLOTTED = new Set(["weapons", "archweapons"]); // slots become their own dropdowns
-const SLOT_ORDER = ["Primary", "Secondary", "Melee", "Arch-gun", "Arch-melee", "Archwing", "Necramech", "K-Drive", "Sentinel", "Sentinel weapon", "Kubrows", "Kavats", "Zaws", "Kitguns", "Amps", "Sirocco"];
+const SLOT_ORDER = ["Primary", "Secondary", "Melee", "Arch-gun", "Arch-melee", "Archwing", "Necramech", "K-Drive", "Plexus", "Sentinel", "Sentinel weapon", "Kubrows", "Kavats", "Hounds", "Hound weapons", "MOAs", "Predasites", "Vulpaphylas", "Zaws", "Kitguns", "Amps", "Sirocco"];
 const TIER_ORDER = { Lith: 0, Meso: 1, Neo: 2, Axi: 3, Requiem: 4, Omnia: 5 };
 const RAR = { C: "Common", U: "Uncommon", R: "Rare" };
 const RAR_ORDER = { R: 0, U: 1, C: 2 };
 const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
 const DEFAULT_SETTINGS = {
-  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, mainOpen: {}, runsOpen: {}, rotOpen: {}, hideVend: {},
+  theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, mainOpen: {}, slotOpen: {}, runsOpen: {}, rotOpen: {}, hideVend: {},
   show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true, whatsnew: true },
   reduceMotion: false, compact: false, textSize: 100, startPage: 3, fissMode: "normal",
 };
@@ -111,9 +111,9 @@ function normaliseState(s) {
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
     hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
-    relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
+    xm: s.xm || {}, relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
     building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
-    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
+    settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, slotOpen: { ...(st.slotOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
   };
 }
 let state = loadState();
@@ -513,7 +513,7 @@ function buildMain() {
       <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
       <button class="iconbtn" id="filtBtn" aria-label="Sort and filters" aria-expanded="false">${FILTER_SVG}</button></div>
       <div class="fpanel hidden" id="fpanel">
-        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By type</button><button class="chip" data-sort="az">A–Z</button></div>
+        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By section</button><button class="chip" data-sort="az">A–Z</button></div>
         <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
         <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button></div></div></div>
     <div id="mainList"></div>
@@ -531,7 +531,7 @@ function buildMain() {
   // dropdowns (Base / Prime, weapon slots) remember whether they're open
   $("#mainList").addEventListener("toggle", e => {
     const d = e.target; if (!d.matches || mainQuery) return;
-    if (d.matches("details.secgrp")) { if (d.open) delete S().collapsed[d.dataset.slot]; else S().collapsed[d.dataset.slot] = 1; save(); }
+    if (d.matches("details.secgrp")) { S().slotOpen[d.dataset.slot] = d.open ? 1 : 0; save(); }
     if (d.matches("details.mgrp")) { S().mainOpen[d.dataset.mg] = d.open ? 1 : 0; save(); }
   }, true);
   $("#search").addEventListener("input", e => {
@@ -569,7 +569,7 @@ function entriesOf(list) {
   return [...m.values()].sort((a, b) => a.n.localeCompare(b.n));
 }
 function sectionsFor(entries) {
-  const secs = new Map(), az = mainCat === "all" && S().mainSort === "az";
+  const secs = new Map(), az = S().mainSort === "az"; // A–Z: one list, no headings, in any category
   const one = mainCat !== "all" && new Set(entries.map(e => e.slot)).size > 1;
   const key = e => az ? null : mainCat === "all" ? (SLOTTED.has(e.cat) ? `${CAT_LABEL[e.cat]} · ${e.slot || "Other"}` : CAT_LABEL[e.cat] || "Other") : one ? e.slot || "Other" : null;
   entries.forEach(e => { const k = key(e); if (!secs.has(k)) secs.set(k, { cat: e.cat, list: [] }); secs.get(k).list.push(e); });
@@ -588,7 +588,7 @@ function listHTML(mg, items) {
     const grid = `<div class="grid">${v.list.map(entryHTML).join("")}</div>`;
     const ck = `${mg}:${k}`;
     if (k && SLOTTED.has(v.cat)) {
-      const open = mainQuery || !S().collapsed[ck];
+      const open = mainQuery || S().slotOpen[ck]; // closed the first time, then as you left it
       h += `<details class="secgrp" data-slot="${esc(ck)}"${open ? " open" : ""}><summary><h2 class="sec">${esc(k)}</h2><span class="seccnt">${v.list.length}</span></summary>${grid}</details>`;
     } else h += (k ? `<h2 class="sec">${esc(k)}</h2>` : "") + grid;
   });
@@ -615,7 +615,6 @@ function renderMain() {
       <div class="mgbody">${open ? listHTML(mg, items) : ""}</div></details>`;
   });
   const sc = $("#sortCtl");
-  sc.classList.toggle("hidden", mainCat !== "all");
   sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
   $("#mainList").innerHTML = h;
   $("#mainList").querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
@@ -627,7 +626,69 @@ function fillMg(d) {
   body.innerHTML = listHTML(mg, mgPool(mg === "base" ? BASE : ITEMS).filter(passes));
   body.querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
 }
+/* ---------- MASTERY RANK ESTIMATE ----------
+   Mastery points for each item marked Mastered: weapons 3,000 (Kuva, Tenet and Coda weapons
+   and the Paracesis 4,000 at rank 40); Warframes, companions, Archwings and K-Drives 6,000;
+   Necramechs 8,000 at rank 40. MR n needs 2,500 × n²; each Legendary rank 147,500 more. */
+function masteryXP(it) {
+  if (it.k === "t") return 0;
+  if (/^(Kuva|Tenet|Coda) /.test(it.n) || it.n === "Paracesis") return 4000;
+  if (it.slot === "Necramech") return 8000;
+  if (it.w || ["weapons", "archweapons", "modweapons", "amps"].includes(it.cat)) return 3000;
+  return 6000;
+}
+const mrNeed = r => r <= 30 ? 2500 * r * r : 2250000 + 147500 * (r - 30);
+const mrLabel = r => r > 30 ? `Legendary\u00a0${r - 30}` : `MR\u00a0${r}`; // keep "MR 10" on one line
+/* Mastery that doesn't come from levelling gear: Star Chart and Steel Path nodes and Junctions,
+   Railjack and Drifter Intrinsics. Node totals are the wiki's (Update 42): 241 nodes worth 14,569
+   points plus 13 Junctions at 1,000 each, on each chart. Every Intrinsic rank is worth 1,500. */
+const XM = {
+  charts: [["sc", "Star Chart"], ["sp", "Steel Path"]], NODES: 241, NODE_PTS: 14569, JUNCTIONS: 13,
+  intr: [["rj", "Railjack Intrinsics", ["Tactical", "Piloting", "Gunnery", "Engineering", "Command"]],
+         ["dr", "Drifter Intrinsics", ["Combat", "Riding", "Opportunity", "Endurance"]]],
+};
+const xmGet = (k, f) => Math.max(0, +(((state.xm || {})[k] || {})[f]) || 0);
+function extraXP() {
+  const out = {};
+  XM.charts.forEach(([k]) => {
+    const n = Math.min(XM.NODES, xmGet(k, "n")), j = Math.min(XM.JUNCTIONS, xmGet(k, "j"));
+    out[k] = Math.round(n * XM.NODE_PTS / XM.NODES) + j * 1000;
+  });
+  XM.intr.forEach(([k, , trees]) => { out[k] = trees.reduce((a, t) => a + Math.min(10, xmGet(k, t)) * 1500, 0); });
+  return out;
+}
+function renderMR() {
+  const box = $("#mrBox"); if (!box) return;
+  let items = 0, n = 0;
+  ALL.forEach(it => { if (state.mastered[it.id]) { items += masteryXP(it); n++; } });
+  const ex = extraXP(), extra = Object.values(ex).reduce((a, b) => a + b, 0), xp = items + extra;
+  let r = 0; while (mrNeed(r + 1) <= xp) r++;
+  const lo = mrNeed(r), hi = mrNeed(r + 1);
+  box.innerHTML = `<div class="sumrow"><span>Estimated Mastery Rank</span><b>${mrLabel(r)}</b></div>
+    <div class="sumsub">${xp.toLocaleString()} mastery points · ${(hi - xp).toLocaleString()} more to ${mrLabel(r + 1)}</div>
+    <div class="bar"><i style="width:${Math.min(100, 100 * (xp - lo) / (hi - lo))}%"></i></div>
+    <div class="mrsplit"><span>Items mastered (${n})</span><b>${items.toLocaleString()}</b>
+      ${XM.charts.map(([k, l]) => `<span>${l}</span><b>${ex[k].toLocaleString()}</b>`).join("")}
+      <span>Intrinsics</span><b>${(ex.rj + ex.dr).toLocaleString()}</b></div>`;
+}
+function xmSet(t, tidy) {
+  const max = +t.max || 0, v = Math.max(0, Math.min(max, Math.floor(+t.value || 0)));
+  state.xm = state.xm || {}; (state.xm[t.dataset.xm] = state.xm[t.dataset.xm] || {})[t.dataset.xf] = v;
+  if (tidy && t.value !== "" && +t.value !== v) t.value = v;
+  save(); renderMR();
+}
+function mrSecHTML() {
+  const num = (k, f, max, label) => `<div class="drow xmrow"><label for="xm-${k}-${f}">${label}</label><input id="xm-${k}-${f}" type="number" inputmode="numeric" min="0" max="${max}" value="${xmGet(k, f) || ""}" placeholder="0" data-xm="${k}" data-xf="${f}"><span class="xmmax">/ ${max}</span></div>`;
+  return `<details class="dsec" id="mrSec"><summary>Mastery Rank</summary><div class="dbody">
+    <div class="summary mrbox" id="mrBox"></div>
+    <p class="dnote">Items count once you mark them Mastered on Main. Add the rest below; your profile in the game shows how much of each chart you've cleared.</p>
+    ${XM.charts.map(([k, l]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All done</button></div>${k === "sp" ? `<p class="dnote">Got the Steel Path? Then the Star Chart is done: tapping All done there fills it in.</p>` : ""}${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
+    ${XM.intr.map(([k, l, trees]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All maxed</button></div>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
+    <p class="dnote">Each node pays once the first time you clear it, and again on the Steel Path; each Junction pays 1,000. Every Intrinsic rank pays 1,500, up to rank 10 in each tree. Node points vary a little from node to node, so partial charts are an estimate.</p>
+  </div></details>`;
+}
 function mainSummary() {
+  renderMR();
   [["base", BASE], ["prime", ITEMS]].forEach(([mg, list]) => {
     const el = document.querySelector(`[data-mgc="${mg}"]`); if (!el) return;
     const c = mgCount(mgPool(list));
@@ -829,7 +890,7 @@ function renderRuns() {
     const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<span class="flag need">${cnt} relic${cnt === 1 ? "" : "s"}</span>` : "");
     return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi"><span class="mt">${esc(f.type)}</span><small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span>${flags ? `<span class="flags">${flags}</span>` : ""}</div>`;
   }).join("")}</div>`;
-  h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} for you` : ""}` : "", body);
+  h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} relevant` : ""}` : "", body);
 
   // Everything missing
   body = `<p class="secsub">All relics for every part you still need, across every Prime you haven't mastered. Gold outline = also in High value. Teal outline = you can get it right now.</p>
@@ -941,6 +1002,7 @@ function renderDrawer() {
       <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
       <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
     </div></details>
+    ${mrSecHTML()}
     <details class="dsec"><summary>Import Data</summary><div class="dbody">
       <h4>Inventory Scan</h4>
       <p class="dnote">Upload a screen recording to update your relics and parts.</p>
@@ -961,6 +1023,7 @@ function renderDrawer() {
       <div class="controls"><button class="chip danger" id="clearBtn">Clear data</button></div>
       <p class="fanline">Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
     <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
+  renderMR();
 }
 const VENDORS = [["baro", "Void Trader"], ["darvo", "Darvo"], ["teshin", "Teshin (Steel Path Honors)"], ["circuit", "Steel Path Circuit"], ["varzia", "Varzia"]];
 async function saveBackupFile(btn) {
@@ -1178,7 +1241,7 @@ const b64u = bytes => { let s = ""; bytes.forEach(b => s += String.fromCharCode(
 const unb64u = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function pipe(bytes, stream) { return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer()); }
 async function makeBackup() {
-  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, pc: state.partCounts, sa: state.scanAt, sf: state.scanFiles, ho: state.hvOwned ? 1 : 0, bd: state.building, bl: Object.keys(state.built) });
+  const payload = JSON.stringify({ v: 1, t: Object.keys(state.ticks), s: Object.keys(state.stars), m: Object.keys(state.mastered), a: Object.keys(state.alerts), h: state.hvMin ? 1 : 0, st: state.settings, x: state.secrets, b: state.banners, u: Object.keys(state.unlocked), w: state.weekly, rc: state.relicCounts, pc: state.partCounts, sa: state.scanAt, sf: state.scanFiles, ho: state.hvOwned ? 1 : 0, bd: state.building, bl: Object.keys(state.built), xm: state.xm });
   const raw = new TextEncoder().encode(payload);
   if (window.CompressionStream) return "WRC1-" + b64u(await pipe(raw, new CompressionStream("deflate-raw")));
   return "WRC0-" + b64u(raw);
@@ -1192,7 +1255,7 @@ async function readBackup(code) {
   const p = JSON.parse(new TextDecoder().decode(bytes));
   if (p.v !== 1) throw new Error("bad");
   const set = arr => Object.fromEntries((arr || []).map(k => [k, 1]));
-  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, partCounts: p.pc, scanAt: p.sa, scanFiles: p.sf, hvOwned: !!p.ho, building: p.bd, built: set(p.bl) });
+  return normaliseState({ ticks: set(p.t), stars: set(p.s), mastered: set(p.m), alerts: set(p.a), hvMin: !!p.h, settings: p.st, secrets: p.x, banners: p.b, unlocked: set(p.u), weekly: p.w, relicCounts: p.rc, partCounts: p.pc, scanAt: p.sa, scanFiles: p.sf, hvOwned: !!p.ho, building: p.bd, built: set(p.bl), xm: p.xm });
 }
 
 /* ---------- COPY + TOAST ---------- */
@@ -1336,7 +1399,7 @@ function afterIntro() {
 let renderQueued = 0;
 function renderAll() {
   refreshLiveSets();
-  renderMain(); renderFavs(); renderRuns(); renderRotating(); renderUpdated();
+  renderMain(); renderFavs(); renderRuns(); renderRotating(); renderUpdated(); renderMR();
 }
 function queueDerived() { // after a tick: refresh lists that depend on missing parts
   clearTimeout(renderQueued);
@@ -1472,6 +1535,13 @@ function bindEvents() {
       return;
     }
     if (e.target.id === "tourBtn") { setDrawer(false); setTimeout(showTour, 250); return; }
+    const xa = e.target.closest("[data-xmall]");
+    if (xa) { // quick-select: a whole chart cleared, or every Intrinsic tree at 10
+      const k = xa.dataset.xmall; state.xm = state.xm || {};
+      const fill = key => { state.xm[key] = key === "rj" || key === "dr" ? Object.fromEntries(XM.intr.find(x => x[0] === key)[2].map(t => [t, 10])) : { n: XM.NODES, j: XM.JUNCTIONS }; };
+      fill(k); if (k === "sp") fill("sc"); // the Steel Path only unlocks once the Star Chart is done
+      save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true; return;
+    }
     if (e.target.id === "clearBtn") { setDrawer(false); setTimeout(showClear, 250); return; }
     if (e.target.id === "invBtn") { setDrawer(false); setTimeout(showInventory, 250); return; }
     if (e.target.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); return; }
@@ -1488,10 +1558,12 @@ function bindEvents() {
       state = next; save(); decoFor = undefined; renderWeekly(); applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
     }
   });
+  dr.addEventListener("input", e => { if (e.target.dataset.xm) xmSet(e.target, false); }); // the estimate updates as you type
   dr.addEventListener("change", e => {
     const t = e.target;
     if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
     if (t.dataset.disp) { S()[t.dataset.disp] = t.checked; save(); applyDisplay(); return; }
+    if (t.dataset.xm) { xmSet(t, true); return; }
     if (t.dataset.vend) { if (t.checked) delete S().hideVend[t.dataset.vend]; else S().hideVend[t.dataset.vend] = 1; save(); renderRotating(); return; }
     if (t.id === "bkFile" && t.files && t.files[0]) {
       const f = t.files[0]; t.value = "";
@@ -1575,6 +1647,7 @@ let drawerOpen = false, weeklyOpen = false;
 function setDrawer(open) {
   drawerOpen = open;
   if (open && weeklyOpen) setWeekly(false);
+  if (open) renderMR();
   document.body.classList.toggle("drawer-open", open);
   $("#drawer").style.transform = ""; $("#scrim").style.opacity = "";
   if (!open) document.activeElement && document.activeElement.blur && document.activeElement.blur();
