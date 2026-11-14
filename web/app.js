@@ -46,18 +46,18 @@ const CAT_INTRO = {
   all: "Everything that counts toward mastery. Base holds the regular versions and their variants; Prime holds every Prime set. Tap a star to add something to Favorites.",
   warframes: "Every Warframe. Tap a card's parts as you collect them, then Mastered once it's rank 30.",
   weapons: "Primary, Secondary and Melee weapons. Variants like MK1, Vandal, Wraith and Kuva sit in their base weapon's card.",
-  vehicles: "Archwings, Necramechs and K-Drives.",
+  vehicles: "Archwings, Necramechs, K-Drives and the Railjack's Plexus.",
   archweapons: "Arch-guns and Arch-melee, used with your Archwing and Necramech.",
   companions: "Sentinels and their weapons, Kubrows and Kavats.",
   modweapons: "Zaws from Cetus and Kitguns from Fortuna and the Necralisk. Only one piece of each counts for mastery.",
-  modcompanions: "Hounds, MOAs, Predasites and Vulpaphylas, built from parts. Only one piece of each counts for mastery.",
+  modcompanions: "Hounds and their weapons, MOAs, Predasites and Vulpaphylas, built from parts. Only one piece of each counts for mastery.",
   amps: "Operator Amps, built from parts at Cetus and Fortuna, plus the Drifter's Sirocco.",
   tauron: "The five Tektolyst Artifacts and their Tauron Strikes. These don't count toward mastery; the ticks are just for your collection.",
 };
 const MG_LINE = { base: "Regular versions of everything that gives mastery, with their variants in the same card.", prime: "Every Prime set, with the relics that drop its parts." };
 const PRIME_CAT = { archgun: "archweapons", archmelee: "archweapons", archwing: "vehicles" };
 const SLOTTED = new Set(["weapons", "archweapons"]); // slots become their own dropdowns
-const SLOT_ORDER = ["Primary", "Secondary", "Melee", "Arch-gun", "Arch-melee", "Archwing", "Necramech", "K-Drive", "Sentinel", "Sentinel weapon", "Kubrows", "Kavats", "Zaws", "Kitguns", "Amps", "Sirocco"];
+const SLOT_ORDER = ["Primary", "Secondary", "Melee", "Arch-gun", "Arch-melee", "Archwing", "Necramech", "K-Drive", "Plexus", "Sentinel", "Sentinel weapon", "Kubrows", "Kavats", "Hounds", "Hound weapons", "MOAs", "Predasites", "Vulpaphylas", "Zaws", "Kitguns", "Amps", "Sirocco"];
 const TIER_ORDER = { Lith: 0, Meso: 1, Neo: 2, Axi: 3, Requiem: 4, Omnia: 5 };
 const RAR = { C: "Common", U: "Uncommon", R: "Rare" };
 const RAR_ORDER = { R: 0, U: 1, C: 2 };
@@ -682,8 +682,8 @@ function mrSecHTML() {
   return `<details class="dsec" id="mrSec"><summary>Mastery Rank</summary><div class="dbody">
     <div class="summary mrbox" id="mrBox"></div>
     <p class="dnote">Items count once you mark them Mastered on Main. Add the rest below; your profile in the game shows how much of each chart you've cleared.</p>
-    ${XM.charts.map(([k, l]) => `<h4>${l}</h4>${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
-    ${XM.intr.map(([k, l, trees]) => `<h4>${l}</h4>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
+    ${XM.charts.map(([k, l]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All done</button></div>${k === "sp" ? `<p class="dnote">Got the Steel Path? Then the Star Chart is done: tapping All done there fills it in.</p>` : ""}${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
+    ${XM.intr.map(([k, l, trees]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All maxed</button></div>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
     <p class="dnote">Each node pays once the first time you clear it, and again on the Steel Path; each Junction pays 1,000. Every Intrinsic rank pays 1,500, up to rank 10 in each tree. Node points vary a little from node to node, so partial charts are an estimate.</p>
   </div></details>`;
 }
@@ -1533,6 +1533,13 @@ function bindEvents() {
       return;
     }
     if (e.target.id === "tourBtn") { setDrawer(false); setTimeout(showTour, 250); return; }
+    const xa = e.target.closest("[data-xmall]");
+    if (xa) { // quick-select: a whole chart cleared, or every Intrinsic tree at 10
+      const k = xa.dataset.xmall; state.xm = state.xm || {};
+      const fill = key => { state.xm[key] = key === "rj" || key === "dr" ? Object.fromEntries(XM.intr.find(x => x[0] === key)[2].map(t => [t, 10])) : { n: XM.NODES, j: XM.JUNCTIONS }; };
+      fill(k); if (k === "sp") fill("sc"); // the Steel Path only unlocks once the Star Chart is done
+      save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true; return;
+    }
     if (e.target.id === "clearBtn") { setDrawer(false); setTimeout(showClear, 250); return; }
     if (e.target.id === "invBtn") { setDrawer(false); setTimeout(showInventory, 250); return; }
     if (e.target.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); return; }
