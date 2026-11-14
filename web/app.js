@@ -640,7 +640,7 @@ function masteryXP(it) {
   return 6000;
 }
 const mrNeed = r => r <= 30 ? 2500 * r * r : 2250000 + 147500 * (r - 30);
-const mrLabel = r => r > 30 ? `Legendary ${r - 30}` : `MR ${r}`;
+const mrLabel = r => r > 30 ? `Legendary\u00a0${r - 30}` : `MR\u00a0${r}`; // keep "MR 10" on one line
 function renderMR() {
   const box = $("#mrBox"); if (!box) return;
   let xp = 0, n = 0;
