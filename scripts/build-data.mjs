@@ -672,6 +672,12 @@ async function buildBase(lists, comps, primeNames) {
   // The Plexus (Railjack) gives mastery but isn't in WFCD's lists
   if (!items.some(i => i.n === "Plexus")) items.push({ id: "plexus", n: "Plexus", cat: "vehicles", slot: "Plexus", b: 1, own: 1,
     get: (cache.Plexus && cache.Plexus.t) || "Comes with your Railjack, the first time you build one. It ranks up as you play Railjack missions.", wiki: "https://wiki.warframe.com/w/Plexus" });
+  // Khora's kavat: WFCD marks her not masterable and she never shows on the in-game profile,
+  // but the wiki counts both versions (they're the 5 Kavats in its mastery totals)
+  for (const [n, fr] of [["Venari", "Khora"], ["Venari Prime", "Khora Prime"]]) if (!items.some(i => i.n === n))
+    items.push({ id: slug(n), n, cat: "companions", slot: "Kavats", b: 1, k: "m", grp: addGroup("g-kavats", { n: "Kavats", cat: "companions", slot: "Kavats", kind: "mod", note: MOD_GROUPS.Kavats[2] }),
+      get: `Comes with ${fr}: she's ${fr}'s own kavat and ranks up as you play ${fr}. She never shows on your profile in the game, but she still counts for mastery.`,
+      wiki: "https://wiki.warframe.com/w/Venari" });
   for (const [a, school] of TAURON) {
     const it = { id: slug(`tauron ${a}`), n: a, cat: "tauron", slot: "Tauron Strike", b: 1, k: "t" };
     it.get = (cache[a] && cache[a].t) || `Sold by Marie in La Cathédrale once you've finished The Old Peace. Unlocks the ${school} Tauron Strike.`;

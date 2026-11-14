@@ -651,6 +651,7 @@ function masteryXP(it) {
   if (it.w || ["weapons", "archweapons", "modweapons", "amps"].includes(it.cat)) return 3000;
   return 6000;
 }
+const mrNow = () => { const xp = Math.max(0, mrOwnXP() + mrAdj()); let r = 0; while (mrNeed(r + 1) <= xp) r++; return r; };
 const mrNeed = r => r <= 30 ? 2500 * r * r : 2250000 + 147500 * (r - 30);
 const mrLabel = r => r > 30 ? `Legendary\u00a0${r - 30}` : `MR\u00a0${r}`; // keep "MR 10" on one line
 /* Mastery that doesn't come from levelling gear: Star Chart and Steel Path nodes and Junctions,
@@ -675,15 +676,32 @@ function renderMR() {
   const box = $("#mrBox"); if (!box) return;
   let items = 0, n = 0;
   ALL.forEach(it => { if (state.mastered[it.id]) { items += masteryXP(it); n++; } });
-  const ex = extraXP(), extra = Object.values(ex).reduce((a, b) => a + b, 0), xp = items + extra;
+  const ex = extraXP(), extra = Object.values(ex).reduce((a, b) => a + b, 0), adj = mrAdj(), xp = Math.max(0, items + extra + adj);
   let r = 0; while (mrNeed(r + 1) <= xp) r++;
   const lo = mrNeed(r), hi = mrNeed(r + 1);
+  const sel = $("#mrRank"); if (sel && !sel.dataset.touched) sel.value = r; // start the picker at the app's own estimate
   box.innerHTML = `<div class="sumrow"><span>Estimated Mastery Rank</span><b>${mrLabel(r)}</b></div>
     <div class="sumsub">${xp.toLocaleString()} mastery points · ${(hi - xp).toLocaleString()} more to ${mrLabel(r + 1)}</div>
     <div class="bar"><i style="width:${Math.min(100, 100 * (xp - lo) / (hi - lo))}%"></i></div>
     <div class="mrsplit"><span>Items mastered (${n})</span><b>${items.toLocaleString()}</b>
       ${XM.charts.map(([k, l]) => `<span>${l}</span><b>${ex[k].toLocaleString()}</b>`).join("")}
-      <span>Intrinsics</span><b>${(ex.rj + ex.dr).toLocaleString()}</b></div>`;
+      <span>Intrinsics</span><b>${(ex.rj + ex.dr).toLocaleString()}</b>
+      ${adj ? `<span>Matched to your game</span><b>${adj > 0 ? "+" : "−"}${Math.abs(adj).toLocaleString()}</b>` : ""}</div>`;
+}
+/* "Match my game": the game counts things the app can't see, like ranks gained on gear you later
+   sold. Matching keeps the difference between the game's total and the app's own count. */
+const mrAdj = () => Math.round(+((state.xm || {}).adj) || 0);
+function mrOwnXP() {
+  let items = 0;
+  ALL.forEach(it => { if (state.mastered[it.id]) items += masteryXP(it); });
+  return items + Object.values(extraXP()).reduce((a, b) => a + b, 0);
+}
+function mrMatch() {
+  const r = +($("#mrRank") || {}).value, left = Math.floor(+String(($("#mrLeft") || {}).value || "").replace(/[^0-9]/g, ""));
+  const msg = $("#mrMsg");
+  if (!(left > 0) || left > mrNeed(r + 1) - mrNeed(r)) { if (msg) { msg.className = "codemsg bad"; msg.textContent = `Type the points the game says you need for ${mrLabel(r + 1)}.`; } return; }
+  state.xm = state.xm || {}; state.xm.adj = mrNeed(r + 1) - left - mrOwnXP();
+  save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true;
 }
 function xmSet(t, tidy) {
   const max = +t.max || 0, v = Math.max(0, Math.min(max, Math.floor(+t.value || 0)));
@@ -699,6 +717,11 @@ function mrSecHTML() {
     ${XM.charts.map(([k, l]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All done</button></div>${k === "sp" ? `<p class="dnote">Got the Steel Path? Then the Star Chart is done: tapping All done there fills it in.</p>` : ""}${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
     ${XM.intr.map(([k, l, trees]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All maxed</button></div>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
     <p class="dnote">Each node pays once the first time you clear it, and again on the Steel Path; each Junction pays 1,000. Every Intrinsic rank pays 1,500, up to rank 10 in each tree. Node points vary a little from node to node, so partial charts are an estimate.</p>
+    <div class="xmhead"><h4>Match my game</h4>${mrAdj() ? `<button class="chip ghost" id="mrClear">Undo</button>` : ""}</div>
+    <p class="dnote">The game also counts things the app can't see, like ranks gained on gear you levelled and then sold. Enter your rank and the points your profile says you need for the next one, then tap Match. The app keeps the difference; if you later fix a tick that caused it, match again.</p>
+    <div class="drow xmrow"><label for="mrRank">Your rank</label><select id="mrRank">${Array.from({ length: 81 }, (_, r) => `<option value="${r}"${r === mrNow() ? " selected" : ""}>${mrLabel(r)}</option>`).join("")}</select></div>
+    <div class="drow xmrow"><label for="mrLeft">Points to next</label><input id="mrLeft" type="text" inputmode="numeric" placeholder="97,862"></div>
+    <button class="chip" id="mrGo">Match</button><p class="codemsg" id="mrMsg"></p>
   </div></details>`;
 }
 function mainSummary() {
@@ -1556,6 +1579,8 @@ function bindEvents() {
       fill(k); if (k === "sp") fill("sc"); // the Steel Path only unlocks once the Star Chart is done
       save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true; return;
     }
+    if (e.target.id === "mrGo") { mrMatch(); return; }
+    if (e.target.id === "mrClear") { delete state.xm.adj; save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true; return; }
     if (e.target.id === "clearBtn") { setDrawer(false); setTimeout(showClear, 250); return; }
     if (e.target.id === "invBtn") { setDrawer(false); setTimeout(showInventory, 250); return; }
     if (e.target.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); return; }
@@ -1572,7 +1597,7 @@ function bindEvents() {
       state = next; save(); decoFor = undefined; renderWeekly(); applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
     }
   });
-  dr.addEventListener("input", e => { if (e.target.dataset.xm) xmSet(e.target, false); }); // the estimate updates as you type
+  dr.addEventListener("input", e => { if (e.target.dataset.xm) xmSet(e.target, false); if (e.target.id === "mrRank") e.target.dataset.touched = 1; }); // the estimate updates as you type
   dr.addEventListener("change", e => {
     const t = e.target;
     if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
