@@ -440,10 +440,10 @@ function moreHTML(it) {
     av.forEach(([r, rar]) => { h += relRow(r, rar); });
     const rsRows = rsShown.map(([r, rar]) => relRow(r, rar, "rs")).join("");
     const vaRows = vaShown.map(([r, rar]) => relRow(r, rar, relicStatus(r) === "rs" ? "va" : relicStatus(r))).join("");
-    if (rows.length && !av.length) {
+    if (rows.length && !av.length) { // nothing farmable: name the relics right away, each one tappable
       const extra = rs.length && sh.resurgence ? ` · ${rs.length} back in Prime Resurgence` : "";
-      if (rsRows || vaRows) h += `<details class="vlt"><summary>All relics vaulted${extra}</summary>${rsRows}${vaRows}</details>`;
-      else h += `<div class="relrow"><span class="farm">All relics vaulted.</span></div>`;
+      h += `<div class="relrow"><span class="farm">All relics vaulted${extra}</span></div><div class="chips vchips">${rows.map(([r, rar]) =>
+        `<button class="rchip ${rar}${relicStatus(r) === "rs" ? " av" : ""}" data-relic="${esc(r)}">${esc(r)}<i>${rar}</i>${ownRel(r)}</button>`).join("")}</div>`;
     } else if (rsRows || vaRows) {
       h += `<details class="vlt"><summary>${rs.length + va.length} more vaulted relic${rs.length + va.length === 1 ? "" : "s"}</summary>${rsRows}${vaRows}</details>`;
     }
@@ -925,7 +925,7 @@ function renderRuns() {
     const match = f.tier === "Omnia" ? Object.keys(needTiers).length > 0 : !!needTiers[f.tier];
     const cnt = f.tier === "Omnia" ? Object.values(needTiers).reduce((a, b) => a + b, 0) : needTiers[f.tier] || 0;
     if (match) fm++;
-    const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<span class="flag need">${cnt} relic${cnt === 1 ? "" : "s"}</span>` : "");
+    const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<button class="flag need" data-ftier="${esc(f.tier)}">${cnt} relic${cnt === 1 ? "" : "s"} ›</button>` : "");
     return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi"><span class="mt">${esc(f.type)}</span><small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span>${flags ? `<span class="flags">${flags}</span>` : ""}</div>`;
   }).join("")}</div>`;
   h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} relevant` : ""}` : "", body);
@@ -1182,6 +1182,7 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]').setAttribute("content", bg);
   if (native && native.setBarColor) try { native.setBarColor(bg, LIGHT_THEMES.has(t)); } catch (e) {}
   decorate(sd);
+  fitTabs(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTabs); // the new theme's lettering may be wider
 }
 
 /* ---------- SPECIAL DAYS ----------
@@ -1346,6 +1347,18 @@ function showRelic(r) {
     <button class="builtbtn" data-close>Close</button></article></div>`;
 }
 
+/* The relics behind a fissure's "N relics" flag: farmable ones of that tier holding parts you
+   need (for starred items when there are any, like the flag itself). Omnia takes every tier. */
+function showTierRelics(tier) {
+  const starItems = starred().filter(active), nm = needMap(starItems.length ? starItems : ITEMS.filter(active));
+  const list = Object.keys(nm).filter(r => obtainable(r) && (tier === "Omnia" || tierOf(r) === tier)).sort(relicSort);
+  $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card relcard"><div class="chead" style="cursor:default"><div class="ctop"><div class="name">${esc(tier)} relics</div></div>
+    <div class="meta"><span class="tag">${list.length} to crack</span><span class="cnt">for your ${starItems.length ? "starred items" : "unmastered Primes"}</span></div></div>
+    <div class="mbody">${list.map(r => `<div class="part"><b><button class="relbtn" data-relic="${esc(r)}">${esc(r)}</button>${ownRel(r)}</b>${nm[r].sort((a, b) => RAR_ORDER[b.rar] - RAR_ORDER[a.rar]).map(x =>
+      `<div class="rrow"><span class="pn">${esc(x.full)}</span><span class="rar ${x.rar}">${RAR[x.rar]}</span></div>`).join("")}</div>`).join("") || `<p class="secsub">Nothing in this tier right now.</p>`}</div>
+    <button class="builtbtn" data-close>Close</button></article></div>`;
+}
+
 /* ---------- MODAL (Vault Watch) ---------- */
 function openVault(itemId) {
   const it = BYID[itemId], a = alertsFor(it);
@@ -1491,6 +1504,8 @@ function bindEvents() {
       ducatSpares().forEach(x => { if (da.dataset.ducall === "0") state.ducKeep[x.full] = 1; else if (x.near) state.ducPick[x.full] = 1; });
       save(); renderRotating(); return;
     }
+    const ft = t.closest("[data-ftier]");
+    if (ft) { showTierRelics(ft.dataset.ftier); return; }
     const rb = t.closest("[data-relic]");
     if (rb) { showRelic(rb.dataset.relic); return; }
     const jp = t.closest("[data-jump]");
@@ -2029,10 +2044,21 @@ function runIntro() {
 }
 
 /* ---------- TOP BAR HEIGHT ---------- */
+/* Tab names shrink until all four fit: some themes' lettering is much wider than others' */
+function fitTabs() {
+  const bar = document.querySelector(".topbar .tabs"); if (!bar) return;
+  const tabs = [...bar.querySelectorAll("a")];
+  tabs.forEach(a => { a.style.fontSize = ""; a.style.letterSpacing = ""; });
+  let size = parseFloat(getComputedStyle(tabs[0]).fontSize), guard = 0;
+  while (bar.scrollWidth > bar.clientWidth + 1 && size > 9 && guard++ < 40) {
+    size -= 0.5; tabs.forEach(a => { a.style.fontSize = size + "px"; a.style.letterSpacing = ".02em"; });
+  }
+}
 function trackTopbar() {
   const tb = document.querySelector(".topbar");
-  const set = () => document.documentElement.style.setProperty("--toph", tb.offsetHeight + "px");
+  const set = () => { fitTabs(); document.documentElement.style.setProperty("--toph", tb.offsetHeight + "px"); };
   set();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(set);
   if (window.ResizeObserver) new ResizeObserver(set).observe(tb); else window.addEventListener("resize", set);
 }
 
