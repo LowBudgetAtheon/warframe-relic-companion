@@ -1146,3 +1146,190 @@ body.reduce-motion .subpage,body.reduce-motion.sub-open .subpage,body.reduce-mot
 .leafpile{position:absolute;left:0;right:0;top:-10px;height:16px;pointer-events:none;z-index:1}
 .leafpile i{position:absolute;display:block;margin-left:-6px}
 .leafpile svg{display:block;width:100%;height:100%;filter:drop-shadow(0 1px 0 rgba(0,0,0,.25))}
+
+/* ======================================================================
+   7/7 (Bungie Day): a subclass theme picked each year, all original art
+   ====================================================================== */
+[data-theme^="sd-77"]{--star:#ffffff}
+[data-theme="sd-77-solar"]{ /* Dawn */
+  --bg:#fbf3e6; --panel:#fffaf2; --panel2:#f8ecd8; --line:#efd7b5;
+  --text:#3a2414; --muted:#86664a; --gold:#e26b12; --gold2:#bf530b;
+  --teal:#ef8420; --done:#cdb89c;
+  --glow:#ffe2b8; --track:#f1e0c6; --box:#c9a37a; --chipon:#fde3c2;
+  --chead1:#fffaf2; --chead2:#fbf1e2; --okline:#f2a65a; --notebg:#fff0dc; --notetext:#4a3220;
+  --dash:#e3c79e; --hvline:#f0b36d; --hvbg:#fff1de; --onaccent:#fffaf2; --baro:#8a4fd0;
+  --rC:#8a5524; --rCbg:#f0dcc4; --rU:#4b5563; --rUbg:#e3e6ea; --rR:#7a5c0e; --rRbg:#f3e3a6; --alert:#d3311b; --scrim:rgba(60,30,0,.4);
+  --star:#e8a33a; --glowc:rgba(242,138,29,.28);
+}
+[data-theme="sd-77-arc"]{ /* Overcast */
+  --bg:#e9eef4; --panel:#f6f8fb; --panel2:#e4eaf2; --line:#c6d2e2;
+  --text:#182233; --muted:#55657d; --gold:#1f6fe0; --gold2:#1557b8;
+  --teal:#2f8cff; --done:#aab6c6;
+  --glow:#dfe9ff; --track:#d6e0ec; --box:#8fa3bf; --chipon:#d8e6ff;
+  --chead1:#f6f8fb; --chead2:#eef2f8; --okline:#7fb2ff; --notebg:#e8f0ff; --notetext:#1f2c40;
+  --dash:#b5c4d8; --hvline:#8cb8ff; --hvbg:#e6efff; --onaccent:#ffffff; --baro:#6b45c8;
+  --rC:#8a5524; --rCbg:#f0dcc4; --rU:#4b5563; --rUbg:#e3e6ea; --rR:#7a5c0e; --rRbg:#f3e3a6; --alert:#d4322a; --scrim:rgba(10,25,50,.4);
+  --star:#4d7fd0; --glowc:rgba(47,140,255,.26);
+}
+[data-theme="sd-77-void"]{ /* Twilight */
+  --bg:#efe9f6; --panel:#faf7fd; --panel2:#ece3f6; --line:#d6c8e8;
+  --text:#24183a; --muted:#67587f; --gold:#6b2fc4; --gold2:#5321a3;
+  --teal:#8a4fe0; --done:#b9aecd;
+  --glow:#e8dcfa; --track:#e0d6ee; --box:#a593c4; --chipon:#e6d8fb;
+  --chead1:#faf7fd; --chead2:#f3edfa; --okline:#b58cf0; --notebg:#f1e8fd; --notetext:#2c2044;
+  --dash:#cbbbe0; --hvline:#b48ef0; --hvbg:#f1e7fe; --onaccent:#ffffff; --baro:#6b2fc4;
+  --rC:#8a5524; --rCbg:#f0dcc4; --rU:#4b5563; --rUbg:#e3e6ea; --rR:#7a5c0e; --rRbg:#f3e3a6; --alert:#c92a4a; --scrim:rgba(30,10,50,.4);
+  --star:#7a4fd0; --glowc:rgba(122,63,214,.28);
+}
+[data-theme="sd-77-stasis"]{ /* Glacier */
+  --bg:#0b1622; --panel:#112233; --panel2:#15293d; --line:#24405c;
+  --text:#eaf6ff; --muted:#9bb6cc; --gold:#bfe8ff; --gold2:#e6f7ff;
+  --teal:#7fd6f0; --done:#2f4a63;
+  --glow:#16304a; --track:#183049; --box:#4e7391; --chipon:#173a55;
+  --chead1:#15293d; --chead2:#112233; --okline:#6cc0e0; --notebg:#12273a; --notetext:#d9ecf8;
+  --dash:#2d4a66; --hvline:#6fb6d8; --hvbg:#10283b; --onaccent:#08131d; --baro:#c3a8ff; --alert:#ff6b7a; --scrim:rgba(0,8,16,.6);
+}
+[data-theme="sd-77-strand"]{ /* Neon thread */
+  --bg:#070a06; --panel:#0e140c; --panel2:#131b10; --line:#1f2e1a;
+  --text:#effff0; --muted:#9fb59a; --gold:#b6ff3c; --gold2:#d8ff8a;
+  --teal:#8dff3a; --done:#2e3d29;
+  --glow:#142411; --track:#172315; --box:#4f6b47; --chipon:#1b2b12;
+  --chead1:#131b10; --chead2:#0e140c; --okline:#79e05a; --notebg:#111c0e; --notetext:#def4d8;
+  --dash:#2b3d25; --hvline:#7fd94a; --hvbg:#121d0e; --onaccent:#070a06; --baro:#d0a8ff; --alert:#ff5a5a; --scrim:rgba(0,0,0,.65);
+  --star:#e8ffe0;
+}
+[data-theme="sd-77-prism"]{ /* Light and Dark */
+  --bg:#f5f3ef; --panel:rgba(255,255,255,.76); --panel2:rgba(250,248,244,.86); --line:rgba(120,110,95,.25);
+  --text:#1d1c22; --muted:#625d69; --gold:#a8801d; --gold2:#2a2933;
+  --teal:#2b2a35; --done:#b9b3aa;
+  --glow:#ffffff; --track:rgba(60,55,50,.12); --box:#9b9389; --chipon:#f1e7cf;
+  --chead1:rgba(255,255,255,.82); --chead2:rgba(250,248,244,.82); --okline:#c9b27a; --notebg:rgba(255,248,232,.85); --notetext:#2a2830;
+  --dash:#d4cbbd; --hvline:#d8c17e; --hvbg:rgba(255,250,236,.82); --onaccent:#f8f6f2; --baro:#6b45c8;
+  --rC:#8a5524; --rCbg:#f0dcc4; --rU:#4b5563; --rUbg:#e3e6ea; --rR:#7a5c0e; --rRbg:#f3e3a6; --alert:#c4302b; --scrim:rgba(20,20,25,.45);
+  --star:#c9a24a;
+}
+
+/* the sky: drifting stars, shooting stars, the companion flying past (behind the pages) */
+.d77sky .stars{position:absolute;inset:-20%;opacity:.55;animation:stardrift 160s linear infinite;
+  background-image:radial-gradient(1.4px 1.4px at 12% 18%,var(--star) 99%,transparent),radial-gradient(1px 1px at 33% 64%,var(--star) 99%,transparent),radial-gradient(1.6px 1.6px at 58% 30%,var(--star) 99%,transparent),
+    radial-gradient(1px 1px at 76% 82%,var(--star) 99%,transparent),radial-gradient(1.2px 1.2px at 88% 12%,var(--star) 99%,transparent),radial-gradient(1px 1px at 22% 88%,var(--star) 99%,transparent),
+    radial-gradient(1.3px 1.3px at 47% 8%,var(--star) 99%,transparent),radial-gradient(1px 1px at 67% 51%,var(--star) 99%,transparent);background-size:260px 260px}
+.d77sky .stars.s2{opacity:.35;background-size:410px 410px;animation-duration:260s;animation-direction:reverse}
+@keyframes stardrift{to{transform:translate(-260px,-130px)}}
+.shoot{position:absolute;width:var(--len);height:1.5px;background:linear-gradient(90deg,transparent,var(--star));transform:rotate(var(--ang));transform-origin:right center;opacity:0;animation:shoot 1.3s ease-out forwards;border-radius:2px}
+@keyframes shoot{0%{opacity:0;translate:0 0}15%{opacity:.9}100%{opacity:0;translate:calc(var(--len) * 1.6) calc(var(--len) * .8)}}
+.flyby{position:absolute;left:-40px;width:22px;height:22px;opacity:.75;animation:flyby 4s ease-in-out forwards}
+.flyby.rtl{left:auto;right:-40px;animation-name:flybyr}
+.flyby svg{width:100%;height:100%}
+@keyframes flyby{to{transform:translate(calc(100vw + 80px),var(--rise)) rotate(8deg)}}
+@keyframes flybyr{to{transform:translate(calc(-100vw - 80px),var(--rise)) rotate(-8deg) scaleX(-1)}}
+
+/* the buddy: an original little probe; tap it to pick again */
+/* perched on the bottom bar, in the gap between Relics and Vendors, so it hardly covers the page */
+.buddy{position:fixed;left:min(calc(80% - 19px),calc(50% + 161px));right:auto;bottom:calc(var(--navh) - 24px);z-index:26;width:38px;height:38px;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto;animation:perch 4s ease-in-out infinite;-webkit-tap-highlight-color:transparent}
+@keyframes perch{50%{transform:translateY(-3px)}}
+.buddy svg,.flyby svg{overflow:visible}
+.bbody{fill:#eef1f8;stroke:#b5bfd3;stroke-width:1.2}
+.bbelly{fill:none;stroke:#cfd6e4;stroke-width:1.2}
+.bvisor{fill:#1b2238}
+.eye{fill:#9fd6ff;transform-box:fill-box;transform-origin:center;transition:transform .12s}
+.beyewrap{transition:transform .5s ease}
+.bfins path{fill:none;stroke:#cfd6e6;stroke-width:2.2;stroke-linecap:round}
+.bant{stroke:#cfd6e6;stroke-width:1.6}
+.btip{fill:#e9d29a}
+.buddy svg{width:100%;height:100%;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.buddy.r-blink .eye{transform:scaleY(.12)}
+.buddy.r-spin svg{animation:bspin .9s ease-in-out}
+.buddy.r-hop svg{animation:bhop .7s ease-out}
+.buddy.r-wiggle svg{animation:bwig .6s ease-in-out}
+@keyframes bspin{to{transform:rotate(360deg)}}
+@keyframes bhop{30%{transform:translateY(-14px)}60%{transform:translateY(0)}80%{transform:translateY(-4px)}}
+@keyframes bwig{20%{transform:rotate(-14deg)}40%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(4deg)}}
+body.reduce-motion .buddy,body.reduce-motion .buddy svg{animation:none !important}
+
+/* launch: a burst of Light on the logo */
+#intro.d77::after{content:"";position:absolute;left:50%;top:45%;width:30px;height:30px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,#fff 0,rgba(255,244,214,.75) 35%,rgba(255,226,160,0) 70%);transform:translate(-50%,-50%) scale(0);animation:lightburst 1.2s .85s ease-out forwards}
+@keyframes lightburst{60%{opacity:1}100%{transform:translate(-50%,-50%) scale(40);opacity:0}}
+
+/* the subclass pop-up */
+.d77pick .subgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.subpick{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:92px;padding:12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--c1) 55%,transparent);
+  background:linear-gradient(150deg,var(--c0) 0%,color-mix(in srgb,var(--c0) 70%,var(--c1)) 160%);color:var(--c2);text-align:left;cursor:pointer;font:inherit}
+.subpick b{font:700 17px var(--fh);letter-spacing:.08em;text-transform:uppercase;color:var(--c1)}
+.subpick small{font-size:12.5px;color:color-mix(in srgb,var(--c1) 55%,#555)}
+.subpick[data-d77="stasis"] small,.subpick[data-d77="strand"] small{color:var(--c2)}
+.subpick[data-d77="prism"]{background:linear-gradient(135deg,#fbf9f4 0 55%,#2b2a33 100%)}
+.subpick[data-d77="prism"] b{color:#a8801d}
+.subpick .sw{display:flex;gap:4px}.subpick .sw i{width:12px;height:6px;border-radius:2px;background:var(--c1)}.subpick .sw i:nth-child(2){background:var(--c2)}.subpick .sw i:nth-child(3){background:var(--c0);outline:1px solid var(--c1)}
+.subpick.on{box-shadow:0 0 0 2px var(--c1)}
+.d77banner{text-align:center;font:700 17px var(--fh);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);transition:opacity .5s}
+.d77banner.out{opacity:0}
+
+/* Solar, Arc, Void: a soft glow in the subclass colour */
+:is([data-theme="sd-77-solar"],[data-theme="sd-77-arc"],[data-theme="sd-77-void"]) :is(.pcard,.card,.summary){box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 18%,transparent),0 4px 22px var(--glowc)}
+:is([data-theme="sd-77-solar"],[data-theme="sd-77-arc"],[data-theme="sd-77-void"]) :is(.chip[aria-pressed="true"],.bigbtn,.focusbtn){box-shadow:0 0 14px var(--glowc)}
+/* Solar: embers rising and a burst of sparks now and then */
+.ember{position:absolute;bottom:-10px;width:var(--sz);height:var(--sz);border-radius:50%;background:radial-gradient(circle,#fff3c4 0,#ffb547 40%,rgba(242,110,20,0) 72%);
+  animation:ember var(--d) linear forwards,flick .45s ease-in-out infinite alternate}
+@keyframes ember{to{transform:translate(var(--dx),-105vh);opacity:0}}
+@keyframes flick{to{filter:brightness(1.6)}}
+.spark{position:absolute;width:10px;height:1.6px;border-radius:2px;background:linear-gradient(90deg,#fff1b8,#ff8a1d);transform:rotate(var(--ang));transform-origin:left center;animation:spark .8s ease-out forwards}
+@keyframes spark{from{opacity:1;translate:0 0}to{opacity:0;translate:calc(cos(var(--ang)) * var(--dist)) calc(sin(var(--ang)) * var(--dist))}}
+/* Arc: a crackle running along a card's edge */
+.zapped{position:relative}
+.zap{position:absolute;left:-6px;top:-6px;width:calc(100% + 12px);height:calc(100% + 12px);pointer-events:none;overflow:visible;z-index:1;animation:zap .5s steps(5) forwards}
+.zap polyline{fill:none;stroke:#7dbbff;stroke-width:2.2;stroke-linejoin:bevel;filter:drop-shadow(0 0 2px #4da3ff) drop-shadow(0 0 5px #2f8cff)}
+@keyframes zap{0%{opacity:1}20%{opacity:.3}40%{opacity:1}70%{opacity:.6}100%{opacity:0}}
+/* Void: a slow dark swirl far behind the cards, and a glow that breathes */
+.horizon{position:absolute;left:50%;top:46%;width:150vmax;height:150vmax;margin:-75vmax 0 0 -75vmax;opacity:.22;animation:swirl 90s linear infinite;
+  background:conic-gradient(from 0deg,#2a1450,transparent 12%,#4b2490 22%,transparent 34%,#2a1450 46%,transparent 58%,#4b2490 70%,transparent 82%,#2a1450);
+  -webkit-mask:radial-gradient(circle,#000 0,#000 6%,rgba(0,0,0,.6) 18%,transparent 48%);mask:radial-gradient(circle,#000 0,#000 6%,rgba(0,0,0,.6) 18%,transparent 48%)}
+@keyframes swirl{to{transform:rotate(360deg)}}
+.breath{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 55%,rgba(138,79,224,.32),transparent 65%);animation:breathe 7s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.35}}
+[data-theme="sd-77-void"] :is(.pcard,.card){animation:vbreathe 7s ease-in-out infinite}
+@keyframes vbreathe{50%{box-shadow:0 0 0 1px rgba(107,47,196,.12),0 4px 34px rgba(122,63,214,.42)}}
+/* Stasis: frost along the top of each card, and ice shards on its corners */
+[data-theme="sd-77-stasis"] :is(.pcard,.card){position:relative;border-top-color:#9fe2ff}
+[data-theme="sd-77-stasis"] :is(.pcard,.card)::before{content:"";position:absolute;left:0;right:0;top:0;height:9px;pointer-events:none;border-radius:inherit;
+  background:repeating-linear-gradient(115deg,rgba(220,245,255,.55) 0 2px,transparent 2px 7px),linear-gradient(180deg,rgba(200,240,255,.28),transparent);
+  -webkit-mask:linear-gradient(180deg,#000,transparent);mask:linear-gradient(180deg,#000,transparent)}
+[data-theme="sd-77-stasis"] :is(.pcard,.card)::after{content:"";position:absolute;inset:-1px;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(135deg,#c9f0ff 0 7px,transparent 7px) top left/14px 14px no-repeat,linear-gradient(225deg,#c9f0ff 0 7px,transparent 7px) top right/14px 14px no-repeat,
+    linear-gradient(45deg,rgba(159,226,255,.8) 0 5px,transparent 5px) bottom left/10px 10px no-repeat,linear-gradient(315deg,rgba(159,226,255,.8) 0 5px,transparent 5px) bottom right/10px 10px no-repeat}
+/* Strand: glowing threads tie each heading to what's under it */
+[data-theme="sd-77-strand"] .sec{position:relative;padding-left:16px}
+[data-theme="sd-77-strand"] .sec::before{content:"";position:absolute;left:2px;top:50%;width:8px;height:8px;margin-top:-4px;border-radius:50%;background:#b6ff3c;box-shadow:0 0 8px #8dff3a}
+[data-theme="sd-77-strand"] :is(.rows,.grid){position:relative;margin-left:6px;padding-left:12px}
+[data-theme="sd-77-strand"] :is(.rows,.grid)::before{content:"";position:absolute;left:0;top:-14px;bottom:8px;width:1.5px;background:linear-gradient(180deg,#b6ff3c,rgba(141,255,58,.15));box-shadow:0 0 6px #8dff3a}
+[data-theme="sd-77-strand"] .pchead .lbl{position:relative;padding-left:14px}
+[data-theme="sd-77-strand"] .pchead .lbl::before{content:"";position:absolute;left:0;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:#b6ff3c;box-shadow:0 0 8px #8dff3a}
+[data-theme="sd-77-strand"] .pcard{position:relative}
+[data-theme="sd-77-strand"] .pcard::before{content:"";position:absolute;left:17px;top:40px;bottom:14px;width:1px;background:linear-gradient(180deg,rgba(182,255,60,.8),transparent);box-shadow:0 0 5px #8dff3a;pointer-events:none}
+/* Prismatic: an ever-present pearly glow, golden glints, dark tendrils from the edges */
+.pearl{position:absolute;inset:-15%;animation:pearl 34s ease-in-out infinite alternate;
+  background:radial-gradient(45% 35% at 50% 50%,#fffefa 0,rgba(255,254,250,.7) 40%,transparent 75%),
+    radial-gradient(50% 40% at 28% 30%,rgba(255,206,224,.85),transparent 70%),radial-gradient(48% 40% at 74% 34%,rgba(196,226,255,.9),transparent 70%),
+    radial-gradient(52% 44% at 36% 72%,rgba(206,250,226,.8),transparent 70%),radial-gradient(46% 38% at 72% 74%,rgba(240,222,255,.85),transparent 70%),#f7f3ec}
+.dusk{position:absolute;inset:0;background:radial-gradient(ellipse 75% 65% at 50% 50%,transparent 55%,rgba(36,34,44,.16) 85%,rgba(30,28,38,.32) 100%)}
+@keyframes pearl{to{transform:translate(4%,-3%) scale(1.06) rotate(4deg)}}
+.tendrils{position:absolute;inset:0;width:100%;height:100%}
+.tendrils path{fill:#26242e}
+.glint{position:absolute;width:7px;height:7px;background:radial-gradient(circle,#fff6d6 0,#d9b45a 45%,transparent 70%);border-radius:50%;opacity:0;animation:glint var(--d) var(--delay) ease-in-out infinite}
+@keyframes glint{50%{opacity:.9;transform:scale(1.6)}}
+[data-theme="sd-77-prism"] :is(.pcard,.card,.summary,.bnav,.subhead,.mbar){-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+[data-theme="sd-77-prism"] .mbar{background:rgba(245,243,239,.7)}
+[data-theme="sd-77-prism"] .bnav{background:rgba(255,255,255,.72)}
+[data-theme="sd-77-prism"] :is(.phead h1,.sec,.rank,.subhead h1,.lbl.gold){background:linear-gradient(90deg,#c9861e,#2f8cff,#7a3fd6,#4fb8d8,#5fbf2a,#2a2933,#c9861e);background-size:300% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:prismtext 12s linear infinite}
+[data-theme="sd-77-prism"] :is(.bar i,.rbar i){background:linear-gradient(90deg,#d9b45a,#2f8cff,#7a3fd6,#4fb8d8,#8dff3a,#d9b45a);background-size:400% 100%;animation:prismtext 9s linear infinite}
+@keyframes prismtext{to{background-position:300% 0}}
+[data-theme="sd-77-prism"] :is(.pcard,.card){position:relative;overflow:hidden}
+[data-theme="sd-77-prism"] :is(.pcard,.card)::after{content:"";position:absolute;top:-40%;bottom:-40%;left:-60%;width:36%;pointer-events:none;transform:skewX(-22deg);
+  background:linear-gradient(90deg,transparent,rgba(255,170,190,.16),rgba(170,220,255,.2),rgba(190,255,200,.16),transparent);animation:facet 11s ease-in-out infinite}
+[data-theme="sd-77-prism"] .crow .chip.build,[data-theme="sd-77-prism"] .focusbtn,[data-theme="sd-77-prism"] .bigbtn{box-shadow:0 0 0 1px #d9b45a}
+@keyframes facet{0%,72%{left:-60%}100%{left:130%}}
+body.reduce-motion :is(.d77sky .stars,.horizon,.breath,.pearl,.glint,.ember){animation:none}
+body.reduce-motion :is(.pcard,.card)::after{animation:none !important}
+body.reduce-motion [data-theme="sd-77-void"] :is(.pcard,.card),body.reduce-motion [data-theme="sd-77-prism"] :is(.phead h1,.sec,.rank,.subhead h1,.lbl.gold,.bar i,.rbar i){animation:none}

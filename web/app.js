@@ -25,7 +25,7 @@ const THEMES = [
   ["sentient", "Sentient", ["#1e1915", "#e0cdb0", "#a57d4b"]],
   ["duviri", "Duviri", ["#e8d9b8", "#b23b24", "#c66b23"]],
 ];
-const LIGHT_THEMES = new Set(["orokin-light", "duviri", "sd-spring"]);
+const LIGHT_THEMES = new Set(["orokin-light", "duviri", "sd-spring", "sd-77-solar", "sd-77-arc", "sd-77-void", "sd-77-prism"]);
 const SHOW_SWITCHES = [
   ["mods", "Unique mods"],
   ["chances", "Drop chances"],
@@ -121,7 +121,7 @@ function normaliseState(s) {
   }
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin, focus: s.focus && typeof s.focus === "object" ? s.focus : null, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
+    hvMin: !!s.hvMin, d77: s.d77 || null, focus: s.focus && typeof s.focus === "object" ? s.focus : null, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
     xm: s.xm || {}, relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
     building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, slotOpen: { ...(st.slotOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
@@ -1494,33 +1494,42 @@ const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() ==
 const SPECIAL_DAYS = [
   { id: "newyear", theme: "sd-newyear", label: "New Year's", fx: "confetti", m: 1, d: 1 },
   { id: "spring", theme: "sd-spring", label: "Spring equinox", eq: "spring", fx: "spring" },
-  { id: "d77", theme: "sd-77", label: "7/7", fx: "buddy", m: 7, d: 7 },
+  { id: "d77", theme: "sd-77", label: "7/7", fx: "d77", m: 7, d: 7 },
   { id: "autumn", theme: "sd-autumn", label: "Autumn equinox", eq: "autumn", fx: "autumn" },
   { id: "halloween", theme: "sd-halloween", label: "Halloween", m: 10, d: 31 },
   { id: "christmas", theme: "sd-christmas", label: "Christmas", fx: "snow", m: 12, d: 25 },
 ];
 const birthdayDays = () => Object.values(state.secrets || {}).filter(x => x && x.type === "birthday")
   .map(x => ({ id: x.id, theme: x.theme, label: `${x.name}'s birthday`, banner: x.message, m: x.month, d: x.day }));
+/* 7/7: the theme follows the subclass picked today (none yet: the plain starry one) */
+const D77 = [
+  ["solar", "Solar", "Burn bright.", ["#fff4e3", "#f28a1d", "#e2b23c"]], ["arc", "Arc", "Strike fast.", ["#eef3f9", "#2f8cff", "#9cc8ff"]],
+  ["void", "Void", "Bend the dark.", ["#f3edf9", "#7a3fd6", "#c4a3f2"]], ["stasis", "Stasis", "Hold the moment.", ["#0f1f2e", "#9fe2ff", "#e6f7ff"]],
+  ["strand", "Strand", "Weave your path.", ["#0b100a", "#a6ff3c", "#e6ffd0"]], ["prism", "Prismatic", "Light and Dark, in balance.", ["#f7f4ee", "#d9b45a", "#24232b"]],
+];
+const localDay = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+const d77Pick = () => state.d77 && state.d77.day === localDay() && D77.some(x => x[0] === state.d77.pick) ? state.d77.pick : null;
+const withPick = x => x && x.id === "d77" ? { ...x, theme: d77Pick() ? "sd-77-" + d77Pick() : "sd-77", sub: d77Pick() } : x;
+const decoKey = sd => sd ? sd.id + (sd.sub ? ":" + sd.sub : "") : null;
 function specialDay(now = new Date()) {
   const forced = typeof devDay === "function" ? devDay() : null; // Dev tools can switch one on by hand
-  if (forced) return forced;
+  if (forced) return withPick(forced);
   const m = now.getMonth() + 1, d = now.getDate(), y = now.getFullYear();
   const hit = [...birthdayDays(), ...SPECIAL_DAYS].find(x => x.eq ? sameDay(now, equinox(y, x.eq === "autumn")) : x.m === m && x.d === d);
-  return hit || null;
+  return withPick(hit) || null;
 }
 let decoFor = null;
 function decorate(sd) {
-  const key = sd ? sd.id : null;
+  const key = decoKey(sd);
   if (decoFor === key) return;
   decoFor = key;
   document.querySelectorAll(".snow,.buddy,.bdbanner").forEach(e => e.remove());
-  stopFall();
+  stopFall(); stopD77();
   if (!sd) return;
   if (FALL[sd.fx]) startFall(sd.fx);
+  if (sd.fx === "d77") { startD77(sd.sub); if (!sd.sub && !$("#intro") && !$("#modal") && !d77Asked) setTimeout(showD77Picker, 500); }
   if (sd.fx === "snow") document.body.insertAdjacentHTML("beforeend", `<div class="snow" aria-hidden="true"></div>`);
-  if (sd.fx === "buddy") document.body.insertAdjacentHTML("beforeend", `<div class="buddy" aria-hidden="true"><svg viewBox="0 0 34 34">
-    <path d="M17 2 L25 10 L22 17 L25 24 L17 32 L9 24 L12 17 L9 10 Z" fill="#e9d29a" opacity=".9"/><path d="M17 8 L22 13 L17 17 L12 13 Z M17 17 L22 21 L17 26 L12 21 Z" fill="#fbf6e6" opacity=".55"/>
-    <circle class="eye" cx="17" cy="17" r="3.4" fill="#9fd6ff"/></svg></div>`);
+
   if (sd.fx === "confetti" && !S().reduceMotion && (sd.dev || !sessionStorage.getItem("wrc-confetti"))) {
     if (!sd.dev) try { sessionStorage.setItem("wrc-confetti", "1"); } catch (e) {}
     setTimeout(confettiBurst, document.getElementById("intro") ? 2000 : 0); // after the launch animation
@@ -1605,6 +1614,130 @@ function leafPiles(cfg) {
   box.innerHTML = h;
   nav.appendChild(box);
 }
+/* ---------- 7/7 (Bungie Day) ----------
+   Pick a subclass on the day's first launch; each has its own look. Everyone gets drifting stars,
+   the odd shooting star and a little companion flying past, all behind the pages. The buddy is
+   an original design (a round probe with a visor); tap it to pick again. */
+const BUDDY_SVG = `<svg viewBox="0 0 44 44" aria-hidden="true"><g class="bfins"><path d="M9.5 22c-3.4.2-5-2.6-3.2-5.4" /><path d="M34.5 22c3.4.2 5-2.6 3.2-5.4" /></g>
+  <line x1="22" y1="10" x2="22" y2="5.5" class="bant"/><circle cx="22" cy="4.6" r="2" class="btip"/>
+  <circle cx="22" cy="22" r="12" class="bbody"/><path d="M12.6 25.5a12 12 0 0 0 18.8 0" class="bbelly"/>
+  <rect x="13" y="18.2" width="18" height="6.6" rx="3.3" class="bvisor"/><g class="beyewrap"><rect x="19" y="19.6" width="6" height="3.8" rx="1.9" class="eye"/></g></svg>`;
+let d77Timers = [], d77Raf = 0, d77Asked = false, d77Off = null;
+const d77Every = (fn, a, b) => { const go = () => d77Timers.push(setTimeout(() => { if (!document.hidden) fn(); go(); }, rnd(a, b))); go(); };
+function startD77(sub) {
+  // the buddy: tap it to change subclass
+  document.body.insertAdjacentHTML("beforeend", `<button class="buddy" aria-label="Change your subclass">${BUDDY_SVG}</button>`);
+  const bud = $(".buddy");
+  bud.addEventListener("click", () => { buddyReact("spin"); setTimeout(showD77Picker, 250); });
+  d77Every(() => { const e = bud.querySelector(".beyewrap"); if (!e) return; e.style.transform = `translateX(${rnd(-4, 4).toFixed(1)}px)`; setTimeout(() => { e.style.transform = ""; }, 1400); }, 5e3, 11e3);
+  // the sky behind the pages
+  const sky = document.createElement("div");
+  sky.className = "fxbg d77sky"; sky.setAttribute("aria-hidden", "true");
+  sky.innerHTML = `<div class="stars s1"></div><div class="stars s2"></div>`;
+  document.body.prepend(sky);
+  const still = S().reduceMotion;
+  if (!still) {
+    d77Every(() => { // a shooting star
+      const st = document.createElement("i"); st.className = "shoot";
+      st.style.cssText = `left:${rnd(10, 90)}vw;top:${rnd(4, 45)}vh;--len:${rnd(70, 140)}px;--ang:${rnd(18, 42)}deg`;
+      sky.appendChild(st); setTimeout(() => st.remove(), 1400);
+    }, 7e3, 18e3);
+    d77Every(() => { // the little companion flies past
+      const f = document.createElement("i"); f.className = "flyby" + (Math.random() < .5 ? " rtl" : "");
+      f.style.cssText = `top:${rnd(15, 70)}vh;--rise:${rnd(-80, 80)}px`; f.innerHTML = BUDDY_SVG;
+      sky.appendChild(f); setTimeout(() => f.remove(), 4200);
+    }, 22e3, 50e3);
+  }
+  if (sub) d77Extras(sub, sky, still);
+}
+function d77Extras(sub, sky, still) {
+  if (sub === "solar" && !still) { // embers drifting up, and now and then a burst of sparks
+    d77Every(() => { if (sky.querySelectorAll(".ember").length > 10) return;
+      const e = document.createElement("i"); e.className = "ember"; const d = rnd(6, 11);
+      e.style.cssText = `left:${rnd(2, 98)}vw;--d:${d}s;--dx:${rnd(-50, 50)}px;--sz:${rnd(5, 9)}px`; sky.appendChild(e); setTimeout(() => e.remove(), d * 1000); }, 700, 1300);
+    d77Every(() => { const x = rnd(10, 90), y = rnd(25, 85);
+      for (let i = 0; i < 7; i++) { const k = document.createElement("i"); k.className = "spark";
+        k.style.cssText = `left:${x}vw;top:${y}vh;--ang:${rnd(0, 360)}deg;--dist:${rnd(18, 46)}px`; sky.appendChild(k); setTimeout(() => k.remove(), 900); } }, 6e3, 14e3);
+  }
+  if (sub === "arc" && !still) d77Every(() => { // a crackle runs along a card edge on screen
+    const cards = [...document.querySelectorAll(".page .pcard, .page .card, .subpage .card")].filter(c => { const r = c.getBoundingClientRect(); return r.bottom > 40 && r.top < innerHeight - 80 && r.width > 0; });
+    const c = cards[Math.floor(Math.random() * cards.length)]; if (!c) return;
+    // a jagged bolt runs along one edge of the card (on the border, clear of the words)
+    const w = c.offsetWidth, h = c.offsetHeight, side = Math.floor(Math.random() * 4), pts = [];
+    const n = Math.max(6, Math.round((side % 2 ? h : w) / 26));
+    for (let i = 0; i <= n; i++) {
+      const f = i / n, j = i && i < n ? rnd(-3.5, 3.5) : 0;
+      pts.push(side === 0 ? [f * w, j] : side === 2 ? [f * w, h + j] : side === 1 ? [w + j, f * h] : [j, f * h]);
+    }
+    const z = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    z.setAttribute("class", "zap"); z.setAttribute("viewBox", `-6 -6 ${w + 12} ${h + 12}`);
+    z.innerHTML = `<polyline points="${pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}"/>`;
+    c.classList.add("zapped"); c.appendChild(z); setTimeout(() => { z.remove(); c.classList.remove("zapped"); }, 520);
+  }, 3500, 8000);
+  if (sub === "void") sky.insertAdjacentHTML("beforeend", `<div class="horizon"></div><div class="breath"></div>`);
+  if (sub === "prism") prismSky(sky, still);
+}
+/* Prismatic: an ever-present pearly glow with a few golden glints, and dark tendrils creeping in from
+   every edge, reaching for the middle and being pushed back: never winning, never gone. */
+function prismSky(sky, still) {
+  sky.insertAdjacentHTML("beforeend", `<div class="pearl"></div><div class="dusk"></div><svg class="tendrils"><defs><filter id="tdblur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2"/></filter></defs><g filter="url(#tdblur)"></g></svg>`);
+  for (let i = 0; i < 7; i++) { const g = document.createElement("i"); g.className = "glint"; g.style.cssText = `left:${rnd(8, 92)}vw;top:${rnd(10, 85)}vh;--d:${rnd(3, 7)}s;--delay:${rnd(0, 5)}s`; sky.appendChild(g); }
+  const svg = sky.querySelector(".tendrils"), grp = svg.querySelector("g");
+  let W = 0, H = 0;
+  const size = () => { W = innerWidth; H = innerHeight; svg.setAttribute("viewBox", `0 0 ${W} ${H}`); };
+  size(); addEventListener("resize", size); d77Off = () => removeEventListener("resize", size);
+  // spread around the four edges; each one leans in toward somewhere near the middle
+  const T = Array.from({ length: 12 }, (_, i) => {
+    const side = i % 4;
+    return { side, t: (Math.floor(i / 4) + rnd(.15, .85)) / 3, aim: [rnd(.3, .7), rnd(.3, .7)], w: rnd(26, 46), reach: rnd(.42, .62),
+      phase: rnd(0, 6.3), speed: rnd(.07, .14), wob: rnd(.12, .22), curl: rnd(-1, 1) < 0 ? -1 : 1, el: null };
+  });
+  T.forEach(t => { t.el = document.createElementNS("http://www.w3.org/2000/svg", "path"); grp.appendChild(t.el); });
+  const draw = time => {
+    const s = time / 1000;
+    T.forEach(t => {
+      const bx = [t.t * W, W + 6, t.t * W, -6][t.side], by = [-6, t.t * H, H + 6, t.t * H][t.side];
+      const tx = t.aim[0] * W, ty = t.aim[1] * H;
+      // it reaches in and is pushed back by the Light: never wins, never leaves
+      const ext = t.reach * (.4 + .6 * (.5 + .5 * Math.sin(s * t.speed * 2 + t.phase)));
+      const dx = tx - bx, dy = ty - by, full = Math.min(Math.hypot(dx, dy), t.side % 2 ? W * .55 : H * .32);
+      const len = full * ext, ux = dx / Math.hypot(dx, dy), uy = dy / Math.hypot(dx, dy), nx = -uy, ny = ux;
+      const N = 30, L = [], R = [];
+      for (let k = 0; k <= N; k++) {
+        const f = k / N, d = f * len;
+        // a slow S-bend along the body, curling harder toward the tip
+        const bend = (Math.sin(f * 4.2 - s * .9 + t.phase) * .55 + t.curl * f * f * 1.4) * t.wob * len * f;
+        const cx = bx + ux * d + nx * bend, cy = by + uy * d + ny * bend, hw = t.w * Math.pow(1 - f, 1.25) / 2 + .6;
+        L.push(`${(cx + nx * hw).toFixed(1)},${(cy + ny * hw).toFixed(1)}`); R.unshift(`${(cx - nx * hw).toFixed(1)},${(cy - ny * hw).toFixed(1)}`);
+      }
+      t.el.setAttribute("d", `M${L.join(" L")} L${R.join(" L")} Z`);
+      t.el.setAttribute("opacity", (.32 + .45 * ext / t.reach).toFixed(2));
+    });
+    if (!still && grp.isConnected) d77Raf = requestAnimationFrame(draw);
+  };
+  d77Raf = requestAnimationFrame(draw);
+}
+function stopD77() {
+  d77Timers.forEach(clearTimeout); d77Timers = []; cancelAnimationFrame(d77Raf); if (d77Off) { d77Off(); d77Off = null; }
+  document.querySelectorAll(".d77sky, .buddy").forEach(e => e.remove());
+  document.querySelectorAll(".zap").forEach(e => e.remove()); document.querySelectorAll(".zapped").forEach(e => e.classList.remove("zapped"));
+}
+function showD77Picker() {
+  d77Asked = true;
+  const cur = d77Pick();
+  $("#modalRoot").innerHTML = `<div class="modal d77pick" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">Choose your Light</div><div class="meta"><span class="tag">7/7</span><span class="cnt">Your pick themes the app for the rest of today</span></div></div>
+    <div class="mbody"><div class="subgrid">${D77.map(([k, n, line, c]) => `<button class="subpick${cur === k ? " on" : ""}" data-d77="${k}" style="--c0:${c[0]};--c1:${c[1]};--c2:${c[2]}"><span class="sw"><i></i><i></i><i></i></span><b>${n}</b><small>${line}</small></button>`).join("")}</div>
+    <p class="secsub" style="margin:10px 0 0">Changed your mind? Tap the little floating buddy to pick again.</p></div></article></div>`;
+}
+function pickD77(k) {
+  state.d77 = { day: localDay(), pick: k }; save(); closeModal();
+  decoFor = undefined; applyTheme(); renderDrawer();
+  document.querySelectorAll(".bdbanner").forEach(e => e.remove());
+  document.body.insertAdjacentHTML("beforeend", `<div class="bdbanner d77banner" role="status">Eyes up, Guardian<button aria-label="Dismiss" data-bdclose>×</button></div>`);
+  const bn = $(".d77banner");
+  bn.querySelector("[data-bdclose]").addEventListener("click", () => bn.remove());
+  setTimeout(() => { bn.classList.add("out"); setTimeout(() => bn.remove(), 600); }, 6000);
+}
 function confettiBurst() {
     const cols = ["#ff3fa4", "#3ff0ff", "#b6ff3f", "#ffd23f", "#a35cff"];
     for (let i = 0; i < 70; i++) {
@@ -1615,13 +1748,15 @@ function confettiBurst() {
       setTimeout(() => c.remove(), 5000);
     }
 }
-function blinkBuddy() {
+function blinkBuddy() { buddyReact("blink"); }
+/* The 7/7 buddy reacts: blink on a tick, a spin on Mastered, a hop on Building, a wiggle on a star */
+function buddyReact(kind) {
   const b = document.querySelector(".buddy"); if (!b) return;
-  b.classList.add("blink"); setTimeout(() => b.classList.remove("blink"), 160);
+  const cls = "r-" + kind, ms = { blink: 180, spin: 900, hop: 700, wiggle: 600 }[kind] || 400;
+  b.classList.remove(cls); void b.offsetWidth; b.classList.add(cls); setTimeout(() => b.classList.remove(cls), ms);
 }
 setInterval(() => { // roll over to the next day's theme if the app stays open past midnight
-  const sd = specialDay();
-  if ((sd ? sd.id : null) !== decoFor) { applyTheme(); renderDrawer(); }
+  if (decoKey(specialDay()) !== decoFor) { applyTheme(); renderDrawer(); }
 }, 60000);
 
 /* ---------- SECRET CODES ----------
@@ -1811,6 +1946,8 @@ function showClaims(ids) {
 function afterIntro() {
   if ($("#modal") || document.querySelector(".stalker-take")) return;
   if (!state.tourDone) { showTour(); return; }
+  const sd = specialDay();
+  if (sd && sd.id === "d77" && !sd.sub && !d77Asked) { showD77Picker(); modalOnClose = () => setTimeout(afterIntro, 300); return; }
   const c = dueClaims();
   if (c.length) showClaims(c); else maybeNews();
 }
@@ -1867,7 +2004,7 @@ function bindContent(root) {
     const star = t.closest("[data-star]");
     if (star) {
       const id = star.dataset.star;
-      if (state.stars[id]) delete state.stars[id]; else state.stars[id] = 1;
+      if (state.stars[id]) delete state.stars[id]; else { state.stars[id] = 1; buddyReact("wiggle"); }
       save();
       document.querySelectorAll(`[data-star="${id}"]`).forEach(b => {
         const on = !!state.stars[id];
@@ -1903,7 +2040,7 @@ function bindContent(root) {
     if (m) {
       const id = m.dataset.mastered, snap = snapState(), it = BYID[id];
       const on = !state.mastered[id];
-      if (!on) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); }
+      if (!on) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); buddyReact("spin"); }
       save(); renderAll(); if (subIs("item")) renderSub();
       offerUndo(`${it ? it.n : "Item"} ${on ? "marked mastered" : "unmarked"}`, snap);
       return;
@@ -1912,7 +2049,7 @@ function bindContent(root) {
     if (bb) {
       const it = BYID[bb.dataset.build]; if (!it) return;
       const snap = snapState();
-      state.building[it.id] = { e: Date.now() + buildHours(it) * 3600e3, n: it.n };
+      state.building[it.id] = { e: Date.now() + buildHours(it) * 3600e3, n: it.n }; buddyReact("hop");
       save(); renderAll(); if (subIs("item")) renderSub();
       offerUndo(`${it.n} is building`, snap);
       return;
@@ -1995,6 +2132,7 @@ function bindEvents() {
   $("#bnav").addEventListener("click", e => { const b = e.target.closest("[data-page]"); if (b) goPage(+b.dataset.page, true); });
   $("#scrim").addEventListener("click", () => { setDrawer(false); setWeekly(false); });
   $("#modalRoot").addEventListener("click", e => {
+    const sp = e.target.closest("[data-d77]"); if (sp) { pickD77(sp.dataset.d77); return; }
     if (e.target.id === "modal" || e.target.closest("[data-close]")) { closeModal(); return; }
     const rb = e.target.closest("[data-relic]"); if (rb && !e.target.closest(".relcard .ctop")) { showRelic(rb.dataset.relic); return; }
     const op = e.target.closest("[data-open]"); if (op) { closeModal(); openSub("item", op.dataset.open); }
@@ -2462,6 +2600,7 @@ function runIntro() {
   const reduce = S().reduceMotion || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   const done = () => { if (el.classList.contains("done")) return; el.classList.add("done"); setTimeout(() => { el.remove(); afterIntro(); }, 500); };
   const later = () => { if (Date.now() < (window.__introHold || 0)) setTimeout(later, 200); else done(); };
+  const sd = specialDay(); if (sd && sd.id === "d77" && !reduce) el.classList.add("d77"); // a burst of Light on the launch logo
   setTimeout(later, reduce ? 400 : 1900);
 }
 
