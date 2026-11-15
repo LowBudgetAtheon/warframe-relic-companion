@@ -1263,8 +1263,7 @@ body.reduce-motion .buddy,body.reduce-motion .buddy svg{animation:none !importan
 .subpick[data-d77="prism"] b{color:#a8801d}
 .subpick .sw{display:flex;gap:4px}.subpick .sw i{width:12px;height:6px;border-radius:2px;background:var(--c1)}.subpick .sw i:nth-child(2){background:var(--c2)}.subpick .sw i:nth-child(3){background:var(--c0);outline:1px solid var(--c1)}
 .subpick.on{box-shadow:0 0 0 2px var(--c1)}
-.d77banner{text-align:center;font:700 17px var(--fh);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);transition:opacity .5s}
-.d77banner.out{opacity:0}
+.d77pick .d77greet{font:700 20px var(--fh);letter-spacing:.12em;text-transform:uppercase;color:var(--gold);text-shadow:0 0 12px rgba(233,210,154,.45)}
 
 /* Solar, Arc, Void: a soft glow in the subclass colour */
 :is([data-theme="sd-77-solar"],[data-theme="sd-77-arc"],[data-theme="sd-77-void"]) :is(.pcard,.card,.summary){box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 18%,transparent),0 4px 22px var(--glowc)}
