@@ -23,30 +23,26 @@
   </div>
 </div>
 
-<div class="topbar">
-  <div class="in">
-    <button class="menubtn" id="menuBtn" aria-label="Open menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
-    </button>
-    <nav class="tabs" id="tabs">
-      <a data-page="0">Rotating</a>
-      <a data-page="1">Relic Runs</a>
-      <a data-page="2">Favorites</a>
-      <a data-page="3">Main</a>
-    </nav>
-    <button class="menubtn" id="weeklyBtn" aria-label="Open checklist">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5l1.6 1.6L8.5 5M4 12.5l1.6 1.6L8.5 11M4 18.5l1.6 1.6L8.5 17M12 7h8M12 13h8M12 19h8"/></svg>
-    </button>
-  </div>
-  <div class="updated" id="updated"></div>
-</div>
-
 <main class="pages" id="pages">
-  <section class="page" id="pg-rotating"><div class="wrap" id="rotating"></div></section>
-  <section class="page" id="pg-runs"><div class="wrap" id="runs"></div></section>
-  <section class="page" id="pg-favs"><div class="wrap" id="favs"></div></section>
-  <section class="page" id="pg-main"><div class="wrap" id="main"></div></section>
+  <section class="page" id="pg-profile"><div class="wrap" id="profile"></div></section>
+  <section class="page" id="pg-coll"><div class="wrap" id="main"></div></section>
+  <section class="page" id="pg-home"><div class="wrap" id="home"></div></section>
+  <section class="page" id="pg-relics"><div class="wrap" id="runs"></div></section>
+  <section class="page" id="pg-vendors"><div class="wrap" id="rotating"></div></section>
 </main>
+
+<section class="subpage" id="sub" aria-hidden="true">
+  <div class="subhead"><button class="iconbtn subback" id="subBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button><h1 id="subTitle"></h1></div>
+  <div class="subbody" id="subBody"><div class="wrap" id="subWrap"></div></div>
+</section>
+
+<nav class="bnav" id="bnav" aria-label="Pages">
+  <button data-page="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>Profile</span></button>
+  <button data-page="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg><span>Collection</span></button>
+  <button data-page="2" id="homeTab"><span class="ico-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span><span class="ico-focus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg></span><span class="lbl-home">Home</span><span class="lbl-focus">Focus</span></button>
+  <button data-page="3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 20 12 12 21 4 12z"/><path d="M12 8 16 12 12 16 8 12z"/></svg><span>Relics</span></button>
+  <button data-page="4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg><span>Vendors</span></button>
+</nav>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Menu"></aside>
