@@ -1143,3 +1143,6 @@ body.sub-open .pages{visibility:hidden;transition:visibility 0s .22s}
 body.reduce-motion .subpage,body.reduce-motion.sub-open .subpage,body.reduce-motion.sub-open .pages{transition:none}
 /* the 7/7 buddy floats above the bottom bar */
 .buddy{bottom:calc(var(--navh) + 14px)}
+.leafpile{position:absolute;left:0;right:0;top:-10px;height:16px;pointer-events:none;z-index:1}
+.leafpile i{position:absolute;display:block;margin-left:-6px}
+.leafpile svg{display:block;width:100%;height:100%;filter:drop-shadow(0 1px 0 rgba(0,0,0,.25))}

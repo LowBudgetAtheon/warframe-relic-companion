@@ -1544,7 +1544,7 @@ const LEAF_SVG = {
 const FALL = {
   spring: { every: 1900, max: 5, gust: true, dur: [10, 15], pick: () => Math.random() < .55
     ? ["petal", ["#f7c3d2", "#f4a9bf", "#fbd7e1", "#f1b0c6"], 10, 15] : ["leaf", ["#6dbb55", "#8fcf63", "#4f9a3e", "#a3d977"], 14, 21] },
-  autumn: { every: 620, max: 16, dur: [8, 13], pick: () => [Math.random() < .55 ? "maple" : "leaf",
+  autumn: { every: 620, max: 16, dur: [8, 13], pile: true, pick: () => [Math.random() < .55 ? "maple" : "leaf",
     ["#b8321e", "#d4521c", "#e8862a", "#eab531", "#c96a24", "#8b4a22", "#6f3a1d", "#a8261c"], 15, 24] },
 };
 let fallTimer = 0, gustTimer = 0, fallKind = null;
@@ -1566,6 +1566,7 @@ function startFall(kind) {
   const layer = document.createElement("div");
   layer.className = "fxbg"; layer.setAttribute("aria-hidden", "true");
   document.body.prepend(layer);
+  if (cfg.pile) leafPiles(cfg);
   if (S().reduceMotion) { // still, a few lying where they fell
     for (let i = 0; i < 7; i++) { dropOne(cfg, layer); }
     layer.querySelectorAll(".fall").forEach(el => { el.classList.add("still"); el.style.top = rnd(8, 92) + "vh"; });
@@ -1585,7 +1586,24 @@ function startFall(kind) {
 }
 function stopFall() {
   clearInterval(fallTimer); clearTimeout(gustTimer); fallKind = null;
-  document.querySelectorAll(".fxbg").forEach(e => e.remove());
+  document.querySelectorAll(".fxbg,.leafpile").forEach(e => e.remove());
+}
+/* Autumn: a few small piles and a thin scatter of leaves resting on top of the bottom bar */
+function leafPiles(cfg) {
+  const nav = $("#bnav"); if (!nav) return;
+  const box = document.createElement("div");
+  box.className = "leafpile"; box.setAttribute("aria-hidden", "true");
+  const leaf = (x, y, size) => {
+    const [shape, cols] = cfg.pick();
+    return `<i style="left:${x}%;bottom:${y}px;width:${size}px;height:${size}px;transform:rotate(${rnd(-180, 180)}deg)">${LEAF_SVG[shape](cols[Math.floor(Math.random() * cols.length)])}</i>`;
+  };
+  let h = "";
+  for (let i = 0; i < 16; i++) h += leaf(rnd(1, 97), rnd(-4, 1), rnd(8, 12)); // the thin blanket
+  [rnd(4, 22), rnd(40, 58), rnd(76, 94)].forEach(cx => { // three small piles, heaped in the middle
+    for (let i = 0; i < 15; i++) { const off = rnd(-1, 1) * rnd(0, 6); h += leaf(cx + off, Math.max(-3, 9 - Math.abs(off) * 1.5 + rnd(-3, 2)), rnd(10, 15)); }
+  });
+  box.innerHTML = h;
+  nav.appendChild(box);
 }
 function confettiBurst() {
     const cols = ["#ff3fa4", "#3ff0ff", "#b6ff3f", "#ffd23f", "#a35cff"];
