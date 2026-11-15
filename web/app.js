@@ -738,9 +738,12 @@ function properName(raw) {
   const names = tradeNames();
   return names.find(n => n.toLowerCase() === q) || names.find(n => n.toLowerCase().startsWith(q)) || names.find(n => n.toLowerCase().includes(q)) || null;
 }
+// trade chat links a whole set by its plain name: [Volt Prime], not [Volt Prime Set]
+const chatName = n => n.replace(/ Set$/, "");
+const chatToken = (n, c) => `[${chatName(n)}]${c > 1 ? ` x${c}` : ""}`;
 function splitMsgs(prefix, tokens) {
   const msgs = []; let cur = [];
-  const wrap = list => `${prefix} ${list.join(" ")}`;
+  const wrap = list => `${prefix} ${list.join(" ")} PMO`;
   tokens.forEach(t => { if (cur.length && wrap([...cur, t]).length > TRADE_LIMIT) { msgs.push(wrap(cur)); cur = [t]; } else cur.push(t); });
   if (cur.length) msgs.push(wrap(cur));
   return msgs;
@@ -750,8 +753,8 @@ const msgListHTML = msgs => `<div class="tlist">${msgs.map((t, i) => `<div class
 function renderBuilder() {
   if (!$("#tbOut")) return;
   document.querySelectorAll("[data-tbmode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.tbmode === tb.mode));
-  $("#tbChips").innerHTML = tb.list.map(([n, c], i) => `<span class="tbchip">[${esc(n)}]${c > 1 ? ` x${c}` : ""}<button data-tbdel="${i}" aria-label="Remove ${esc(n)}">×</button></span>`).join("");
-  $("#tbOut").innerHTML = tb.list.length ? msgListHTML(splitMsgs(tb.mode, tb.list.map(([n, c]) => c > 1 ? `[${n}] x${c}` : `[${n}]`))) : "";
+  $("#tbChips").innerHTML = tb.list.map(([n, c], i) => `<span class="tbchip">${esc(chatToken(n, c))}<button data-tbdel="${i}" aria-label="Remove ${esc(n)}">×</button></span>`).join("");
+  $("#tbOut").innerHTML = tb.list.length ? msgListHTML(splitMsgs(tb.mode, tb.list.map(([n, c]) => chatToken(n, c)))) : "";
 }
 function bindTradeBuilder() {
   const inp = $("#tbIn");
@@ -774,15 +777,7 @@ function bindTradeBuilder() {
 function tradeMessages() {
   const m = new Map();
   starred().filter(it => active(it) && it.src !== "other").forEach(it => missing(it).forEach(p => m.set(p.full, (m.get(p.full) || 0) + p.n)));
-  const tokens = [...m.entries()].map(([n, c]) => c > 1 ? `[${n}] x${c}` : `[${n}]`);
-  const msgs = []; let cur = [];
-  const wrap = list => `WTB ${list.join(" ")} PMO`;
-  tokens.forEach(t => {
-    if (cur.length && wrap([...cur, t]).length > TRADE_LIMIT) { msgs.push(wrap(cur)); cur = [t]; }
-    else cur.push(t);
-  });
-  if (cur.length) msgs.push(wrap(cur));
-  return msgs;
+  return splitMsgs("WTB", [...m.entries()].map(([n, c]) => chatToken(n, c)));
 }
 function renderTrade() {
   if (!$("#trade")) return;
