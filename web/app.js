@@ -558,8 +558,9 @@ function passes(it) {
   const q = mainQuery;
   if (mainCat !== "all" && catOf(it) !== mainCat) return false;
   if (mainSlot && slotOf(it) !== mainSlot) return false;
-  if (state.mastered[it.id] && !showMastered) return false;
-  if (hideDone && it.k !== "m") { const { n, g } = progress(it); if (n && g === n) return false; }
+  // searching by name finds an item even if it's mastered or complete: you asked for it
+  if (state.mastered[it.id] && !showMastered && !q) return false;
+  if (hideDone && !q && it.k !== "m") { const { n, g } = progress(it); if (n && g === n) return false; }
   if (q && !it.n.toLowerCase().includes(q) && !(it.grp && GROUPS[it.grp] && GROUPS[it.grp].n.toLowerCase().includes(q))
     && !unitsOf(it).some(u => (u.full || "").toLowerCase().includes(q))) return false;
   return true;
