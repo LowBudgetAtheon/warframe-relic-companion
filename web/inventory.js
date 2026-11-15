@@ -249,7 +249,13 @@
     });
     // a tile whose top is cut off (under the header or the screen edge) can't show its icon: no vote
     const top = Math.max(img.height * 0.12, 0);
-    return blocks.map((b, i) => ({ name: b.n, m: got.has(i), sure: got.has(i) || b.box.y0 - 0.95 * S > top })).filter(x => x.sure);
+    const out = blocks.map((b, i) => ({ name: b.n, m: got.has(i), sure: got.has(i) || b.box.y0 - 0.95 * S > top, x: b.box.x0, y: b.box.y0 }));
+    // reading order, as the Codex lays them out: row by row (rows drift a little across the curved screen), left to right
+    out.sort((a, b) => a.y - b.y);
+    let row = 0, prevY = -Infinity;
+    out.forEach(o => { if (o.y - prevY > 0.5 * S) row++; prevY = o.y; o.row = row; });
+    out.sort((a, b) => a.row - b.row || a.x - b.x);
+    return out.filter(x => x.sure);
   }
 
   /* ---------- frames ---------- */
@@ -371,12 +377,13 @@
       const pIdx = partIndex([...names]), cache = new Map();
       const iIdx = kind === "mastery" ? partIndex(ALL.filter(counts).map(it => it.n), true) : null;
       const seen = new Map(); // name -> [counts seen in each frame]
+      const order = new Map(); // name -> when it first showed up, for listing in Codex order
       for await (const f of frames(file, kind === "mastery")) {
         if (cancelled) break;
         scanSay(`Reading ${label}… ${Math.round(100 * f.i / f.n)}%`, false, true);
         const { data } = await w.recognize(f.bw, {}, { text: false, blocks: true });
         const words = wordsOf(data), frame = new Map();
-        if (kind === "mastery") masteryInFrame(words, f.color, iIdx, cache).forEach(x => frame.set(x.name, x.m ? 1 : 0));
+        if (kind === "mastery") masteryInFrame(words, f.color, iIdx, cache).forEach(x => { frame.set(x.name, x.m ? 1 : 0); if (!order.has(x.name)) order.set(x.name, order.size); });
         else if (kind === "relics") {
           const list = relicsInFrame(words, relIdx, ownedSampler(f.color));
           settleOrder(list, (a, b) => (tierOf(a) === tierOf(b) ? relicSort(a, b) : 0)).forEach((n, i) => { if (n) frame.set(n, (frame.get(n) || 0) + list[i].n); });
@@ -385,7 +392,7 @@
       }
       if (cancelled) { scanSay("Scan cancelled."); return; }
       if (kind === "mastery") { // icon seen in at least half the frames that showed the item
-        finishMastery(new Map([...seen.entries()].map(([k, l]) => [k, l.filter(Boolean).length * 2 >= l.length])), file.name); return;
+        finishMastery(new Map([...seen.entries()].map(([k, l]) => [k, l.filter(Boolean).length * 2 >= l.length])), file.name, order); return;
       }
       const result = new Map([...seen.entries()].map(([k, l]) => [k, mode(l, kind !== "relics")]));
       if (kind === "relics") finishRelics(result, file.name); else finishParts(result, file.name);
@@ -396,10 +403,10 @@
   }
   /* The scan lists what it thinks is NOT mastered for you to check; everything else it saw gets
      marked Mastered once you confirm. */
-  function finishMastery(result, fname) {
-    const seen = [...result.entries()].map(([n, m]) => ({ it: BYNAME[n], m })).filter(x => x.it);
+  function finishMastery(result, fname, order) {
+    const seen = [...result.entries()].map(([n, m]) => ({ it: BYNAME[n], m, o: order && order.has(n) ? order.get(n) : Infinity })).filter(x => x.it);
     if (!seen.length) { scanSay("Couldn't read any item names from that video. Try a recording of the Codex on the console.", true); return; }
-    const notM = seen.filter(x => !x.m).sort((a, b) => a.it.n.localeCompare(b.it.n));
+    const notM = seen.filter(x => !x.m).sort((a, b) => a.o - b.o || a.it.n.localeCompare(b.it.n)); // in the order the Codex showed them
     state.scanFiles.mastery = fname; state.scanAt.mastery = Date.now(); save();
     scanSay(`Read ${seen.length} items: ${seen.length - notM.length} mastered. Check the rest, then confirm.`);
     renderDrawer(); setDrawer(false);
