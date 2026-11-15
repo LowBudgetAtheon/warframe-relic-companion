@@ -1524,8 +1524,17 @@ function decorate(sd) {
   if (decoFor === key) return;
   decoFor = key;
   document.querySelectorAll(".snow,.buddy,.bdbanner").forEach(e => e.remove());
-  stopFall(); stopD77();
+  stopFall(); stopD77(); stopBday();
   if (!sd) return;
+  const bk = BDAY[sd.theme];
+  if (bk) {
+    startBday(bk);
+    const ck = `${sd.id}-${localDay()}`; // the confetti greets the day's first launch
+    if (!S().reduceMotion && (sd.dev || localStorage.getItem("wrc-bdconf") !== ck)) {
+      if (!sd.dev) try { localStorage.setItem("wrc-bdconf", ck); } catch (e) {}
+      setTimeout(() => confettiBurst(bk), document.getElementById("intro") ? 2000 : 300);
+    }
+  }
   if (FALL[sd.fx]) startFall(sd.fx);
   if (sd.fx === "d77") { startD77(sd.sub); if (!sd.sub && !$("#intro") && !$("#modal") && !d77Asked) setTimeout(showD77Picker, 500); }
   if (sd.fx === "snow") document.body.insertAdjacentHTML("beforeend", `<div class="snow" aria-hidden="true"></div>`);
@@ -1537,7 +1546,7 @@ function decorate(sd) {
   const yk = `${sd.id}-${new Date().getFullYear()}`;
   if (sd.banner && (sd.dev || !state.banners[yk])) { // a Dev tools preview doesn't use up the real day's banner
     if (!sd.dev) { state.banners[yk] = 1; save(); }
-    document.body.insertAdjacentHTML("beforeend", `<div class="bdbanner" role="status">${esc(sd.banner)}<button aria-label="Dismiss" data-bdclose>×</button></div>`);
+    document.body.insertAdjacentHTML("beforeend", `<div class="bdbanner${bk ? " bd-" + bk : ""}" role="status">${esc(sd.banner)}<button aria-label="Dismiss" data-bdclose>×</button></div>`);
     document.querySelector("[data-bdclose]").addEventListener("click", e => e.target.parentElement.remove());
   }
 }
@@ -1738,17 +1747,115 @@ function pickD77(k) {
   bn.querySelector("[data-bdclose]").addEventListener("click", () => bn.remove());
   setTimeout(() => { bn.classList.add("out"); setTimeout(() => bn.remove(), 600); }, 6000);
 }
-function confettiBurst() {
-    const cols = ["#ff3fa4", "#3ff0ff", "#b6ff3f", "#ffd23f", "#a35cff"];
+/* ---------- BIRTHDAYS ----------
+   Hayden (sd-b1): gem shards tumbling and glinting behind the pages (Citrine), a violet antimatter
+   ripple where you tap (Nova), a gem sparkle on each tick. Sam (sd-b2): frost creeping in from the
+   corners and ice crystals forming (Frost), a yellow speed streak when you swipe pages and a little
+   spark where you tap (Volt), a burst of frost on each tick. */
+const BDAY = { "sd-b1": "gems", "sd-b2": "frost" };
+const GEM_SVG = (a, b) => `<svg viewBox="0 0 24 26"><path d="M12 1 22 8 18.5 24h-13L2 8z" fill="${a}"/><path d="M12 1 16 8 12 24 8 8z" fill="${b}" opacity=".55"/>
+  <path d="M2 8h20M12 1 8 8l4 16 4-16zM5.5 24 8 8M18.5 24 16 8" stroke="rgba(255,255,255,.45)" stroke-width=".7" fill="none"/><path d="M12 1 2 8 8 8z" fill="#fff" opacity=".28"/></svg>`;
+const SPARK_SVG = c => `<svg viewBox="0 0 20 20"><path d="M10 0c.8 6 3.2 8.4 10 10-6.8 1.6-9.2 4-10 10-.8-6-3.2-8.4-10-10C6.8 8.4 9.2 6 10 0z" fill="${c}"/></svg>`;
+const FLAKE_SVG = c => `<svg viewBox="0 0 24 24" stroke="${c}" stroke-width="1.8" stroke-linecap="round" fill="none"><path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M12 2l-2.4 2.4M12 2l2.4 2.4M12 22l-2.4-2.4M12 22l2.4-2.4"/></svg>`;
+const BOLT_SVG = c => `<svg viewBox="0 0 16 24"><path d="M10 0 1 14h6l-2 10 10-15H8.5z" fill="${c}"/></svg>`;
+const CONF_SHAPES = {
+  gems: [c => GEM_SVG(c, "#ffffff"), c => `<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="${c}"/><circle cx="5" cy="5" r="2" fill="#fff" opacity=".7"/></svg>`, SPARK_SVG],
+  frost: [FLAKE_SVG, BOLT_SVG, SPARK_SVG],
+};
+let bdTimers = [], bdOff = [];
+function startBday(kind) {
+  const sky = document.createElement("div");
+  sky.className = "fxbg bdsky bd-" + kind; sky.setAttribute("aria-hidden", "true");
+  document.body.prepend(sky);
+  const still = S().reduceMotion;
+  if (kind === "gems") {
+    // shards spread over the screen, each drifting and slowly turning; a glint as it faces you
+    const cols = [["#2fc4e0", "#a98bff"], ["#4fe6d6", "#d9fffb"], ["#8f6bff", "#4fe6d6"], ["#1aa7b8", "#c7b0ff"]];
+    for (let i = 0; i < 16; i++) {
+      const [a, b] = cols[i % cols.length], d = rnd(12, 22);
+      const g = document.createElement("i"); g.className = "shard";
+      g.style.cssText = `left:${(i % 4) * 25 + rnd(1, 20)}vw;top:${Math.floor(i / 4) * 24 + rnd(2, 18)}vh;--sz:${rnd(18, 40)}px;--d:${d}s;--dd:${rnd(26, 46)}s;--delay:-${rnd(0, d)}s;--dx:${rnd(-40, 40)}px;--dy:${rnd(-50, 30)}px;--r0:${rnd(0, 360)}deg;opacity:${rnd(.7, 1).toFixed(2)}`;
+      g.innerHTML = `<span class="tumble">${GEM_SVG(a, b)}</span><span class="glint">${SPARK_SVG("#ffffff")}</span>`;
+      sky.appendChild(g);
+    }
+  }
+  if (kind === "frost") {
+    // frost creeps in from each corner, branch by branch, then lingers
+    ["tl", "tr", "bl", "br"].forEach(c => { const f = document.createElement("div"); f.className = "frostc " + c; f.innerHTML = frostSVG(still); sky.appendChild(f); });
+    if (!still) {
+      const every = (fn, a, b) => { const go = () => bdTimers.push(setTimeout(() => { if (!document.hidden) fn(); go(); }, rnd(a, b))); go(); };
+      every(() => { // an ice crystal forms, holds, then melts away
+        const x = document.createElement("i"); x.className = "crystal";
+        x.style.cssText = `left:${rnd(8, 88)}vw;top:${rnd(12, 80)}vh;--sz:${rnd(22, 46)}px;--rot:${rnd(0, 60)}deg`;
+        x.innerHTML = crystalSVG(); sky.appendChild(x); setTimeout(() => x.remove(), 9000);
+      }, 2500, 6000);
+      // Volt: swiping between pages leaves a quick yellow speed streak
+      const pages = $("#pages"); let last = pages.scrollLeft, lastAt = 0;
+      const onScroll = () => {
+        const dx = pages.scrollLeft - last; last = pages.scrollLeft;
+        if (Math.abs(dx) < 4 || Date.now() - lastAt < 450) return; lastAt = Date.now();
+        for (let i = 0; i < 4; i++) {
+          const st = document.createElement("i"); st.className = "streak" + (dx < 0 ? " rev" : "");
+          st.style.cssText = `top:${rnd(10, 90)}vh;--len:${rnd(90, 200)}px;--delay:${(i * .05).toFixed(2)}s`; sky.appendChild(st); setTimeout(() => st.remove(), 800);
+        }
+      };
+      pages.addEventListener("scroll", onScroll, { passive: true }); bdOff.push(() => pages.removeEventListener("scroll", onScroll));
+    }
+  }
+  if (!still) { // Nova's ripple or Volt's spark, right where you tap a card or button
+    const onTap = e => {
+      if (!e.target.closest("button, .pcard, .card .chead, .chip, a, label, [data-act], [data-sub], [data-page]")) return;
+      const fx = document.createElement("i"); fx.className = kind === "gems" ? "tapring" : "tapspark";
+      fx.style.cssText = `left:${e.clientX}px;top:${e.clientY}px`;
+      if (kind === "frost") fx.innerHTML = Array.from({ length: 5 }, () => `<b style="--ang:${rnd(0, 360)}deg;--dist:${rnd(10, 20)}px"></b>`).join("");
+      document.body.appendChild(fx); setTimeout(() => fx.remove(), 600);
+    };
+    document.addEventListener("pointerdown", onTap, { passive: true }); bdOff.push(() => document.removeEventListener("pointerdown", onTap));
+  }
+}
+function frostSVG(still) { // branching ice, drawn outward from the corner
+  const segs = [];
+  const grow = (x, y, ang, len, depth, t0) => {
+    if (depth > 3 || len < 6) return;
+    const x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len;
+    segs.push({ d: `M${x.toFixed(1)} ${y.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`, w: Math.max(.5, 2.4 - depth * .5), t0, t: len / 9 });
+    const kids = depth < 2 ? 2 : 1;
+    for (let k = 1; k <= kids; k++) {
+      const f = k / (kids + .4), bx = x + Math.cos(ang) * len * f, by = y + Math.sin(ang) * len * f, side = k % 2 ? 1 : -1;
+      grow(bx, by, ang + side * (Math.PI / 3) * rnd(.8, 1.1), len * rnd(.38, .55), depth + 1, t0 + len * f / 9);
+    }
+    grow(x2, y2, ang + rnd(-.25, .25), len * .6, depth + 1, t0 + len / 9);
+  };
+  for (let i = 0; i < 3; i++) grow(0, 0, (Math.PI / 2) * (.18 + i * .32) + rnd(-.08, .08), rnd(80, 120), 0, i * 1.5);
+  return `<svg viewBox="0 0 230 230">${segs.map(g => `<path d="${g.d}" pathLength="1" stroke-width="${g.w.toFixed(2)}"${still ? "" : ` style="animation-delay:${g.t0.toFixed(2)}s;animation-duration:${Math.max(1, g.t).toFixed(2)}s"`}/>`).join("")}</svg>`;
+}
+const crystalSVG = () => `<svg viewBox="-12 -12 24 24">${[0, 60, 120, 180, 240, 300].map(a => `<g transform="rotate(${a})"><path d="M0 0V-10.5M0 -5 -2.6 -7.6M0 -5 2.6 -7.6M0 -8 -1.6 -9.6M0 -8 1.6 -9.6" pathLength="1"/></g>`).join("")}</svg>`;
+function bdayTick(el) {
+  const kind = BDAY[document.body.dataset.theme]; if (!kind || S().reduceMotion || !el.getBoundingClientRect) return;
+  const r = el.getBoundingClientRect(); if (!r.width) return;
+  const fx = document.createElement("i"); fx.className = "tickfx " + kind;
+  fx.style.cssText = `left:${r.left + r.width / 2}px;top:${r.top + r.height / 2}px`;
+  fx.innerHTML = kind === "gems" ? `<span class="star">${SPARK_SVG("#d9fffb")}</span>` + Array.from({ length: 6 }, (_, i) => `<b style="--ang:${i * 60 + rnd(-12, 12)}deg;--dist:${rnd(14, 22)}px;--c:${i % 2 ? "#a98bff" : "#4fe6d6"}"></b>`).join("")
+    : `<span class="ring"></span>` + Array.from({ length: 6 }, (_, i) => `<b style="--ang:${i * 60 + 30}deg;--dist:${rnd(13, 19)}px"></b>`).join("");
+  document.body.appendChild(fx); setTimeout(() => fx.remove(), 700);
+}
+function stopBday() {
+  bdTimers.forEach(clearTimeout); bdTimers = []; bdOff.forEach(f => f()); bdOff = [];
+  document.querySelectorAll(".bdsky, .tickfx, .tapring, .tapspark").forEach(e => e.remove());
+}
+function confettiBurst(kind) {
+    const cols = kind === "gems" ? ["#4fe6d6", "#a98bff", "#d9fffb", "#2fc4e0", "#c7b0ff"] : kind === "frost" ? ["#cfeeff", "#ffffff", "#f5d83a", "#ff8a3d", "#6fd0ff"] : ["#ff3fa4", "#3ff0ff", "#b6ff3f", "#ffd23f", "#a35cff"];
     for (let i = 0; i < 70; i++) {
       const c = document.createElement("i");
-      c.className = "confetti";
-      c.style.cssText = `left:${Math.random() * 100}vw;background:${cols[i % cols.length]};--dx:${(Math.random() - .5) * 120}px;--rot:${360 + Math.random() * 720}deg;--dur:${2 + Math.random() * 1.8}s;--delay:${Math.random() * .6}s`;
+      c.className = "confetti" + (kind ? " shape" : "");
+      const col = cols[i % cols.length];
+      if (kind) c.innerHTML = CONF_SHAPES[kind][i % CONF_SHAPES[kind].length](col);
+      c.style.cssText = `left:${Math.random() * 100}vw;${kind ? "" : `background:${col};`}--dx:${(Math.random() - .5) * 120}px;--rot:${360 + Math.random() * 720}deg;--dur:${2 + Math.random() * 1.8}s;--delay:${Math.random() * .6}s`;
       document.body.appendChild(c);
       setTimeout(() => c.remove(), 5000);
     }
 }
-function blinkBuddy() { buddyReact("blink"); }
+function blinkBuddy(el) { buddyReact("blink"); if (el) bdayTick(el); }
 /* The 7/7 buddy reacts: blink on a tick, a spin on Mastered, a hop on Building, a wiggle on a star */
 function buddyReact(kind) {
   const b = document.querySelector(".buddy"); if (!b) return;
@@ -1982,13 +2089,13 @@ function bindContent(root) {
     const mid = t.dataset.m;
     if (mid) { // a modular piece: its tick is Mastered
       const snap = snapState(), it = BYID[mid];
-      if (t.checked) { state.mastered[mid] = 1; blinkBuddy(); } else delete state.mastered[mid];
+      if (t.checked) { state.mastered[mid] = 1; blinkBuddy(t); } else delete state.mastered[mid];
       save(); refreshCards(mid); queueDerived();
       offerUndo(`${it ? it.n : "Item"} ${t.checked ? "marked mastered" : "unmarked"}`, snap); return;
     }
     const u = t.dataset.u; if (!u) return;
     const id = t.dataset.it, it = BYID[id], hadB = !!(state.building[id] || state.built[id]);
-    if (t.checked) { state.ticks[u] = 1; blinkBuddy(); } else { delete state.ticks[u]; clearBuild(id); }
+    if (t.checked) { state.ticks[u] = 1; blinkBuddy(t); } else { delete state.ticks[u]; clearBuild(id); }
     save(); refreshCards(id); queueDerived();
     if (it && hadB && !t.checked && subIs("item")) setTimeout(renderSub, 350);
   });
@@ -2371,7 +2478,7 @@ function bindWeekly() {
   wk.addEventListener("change", e => {
     const k = e.target.dataset.w; if (!k) return;
     const sec = k.split(":")[0];
-    if (e.target.checked) { state.weekly.t[k] = periodKey(sec); blinkBuddy(); } else delete state.weekly.t[k];
+    if (e.target.checked) { state.weekly.t[k] = periodKey(sec); blinkBuddy(e.target); } else delete state.weekly.t[k];
     save(); renderWeekly(); renderHome();
   });
   wk.addEventListener("click", e => {

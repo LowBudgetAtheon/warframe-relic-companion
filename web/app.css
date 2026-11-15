@@ -163,13 +163,13 @@ body[data-theme="duviri"] .chip,body[data-theme="duviri"] .tag,body[data-theme="
   --chead1:#111829; --chead2:#0c1120; --okline:#6fa8d8; --notebg:#141a2c; --notetext:#dde3ef;
   --dash:#38465f; --hvline:#8a7a4a; --hvbg:#171a26; --onaccent:#05070f; --baro:#c9b0ff; --alert:#ff5a6e; --scrim:rgba(0,0,0,.65);
 }
-[data-theme="sd-b1"]{
-  --bg:#110e1e; --panel:#1a1530; --panel2:#211b3b; --line:#352c5a;
-  --text:#f5f1ff; --muted:#aaa1cc; --gold:#f2b33d; --gold2:#e9f4ff;
-  --teal:#b06bff; --done:#4a4268;
-  --glow:#2b2350; --track:#221c3c; --box:#6a5f99; --chipon:#33224a;
-  --chead1:#1f1938; --chead2:#1a1530; --okline:#9b6bd6; --notebg:#241a33; --notetext:#ebe5ff;
-  --dash:#4a4078; --hvline:#b07a26; --hvbg:#2a1e2e; --onaccent:#110e1e; --baro:#ffd27a; --alert:#ff5a8a; --scrim:rgba(0,0,0,.62);
+[data-theme="sd-b1"]{ /* Hayden: dark, aqua and violet, gemlike */
+  --bg:#05141a; --panel:#0a1f27; --panel2:#0e2730; --line:#1a3d48;
+  --text:#ebfdff; --muted:#94bcc3; --gold:#4fe6d6; --gold2:#dcfffb;
+  --teal:#a98bff; --done:#2b4a52;
+  --glow:#0e3039; --track:#0f2a32; --box:#4b7f88; --chipon:#14303b;
+  --chead1:#0e2730; --chead2:#0a1f27; --okline:#4fe6d6; --notebg:#0f2430; --notetext:#dff6f8;
+  --dash:#24505b; --hvline:#9a7cff; --hvbg:#141a35; --onaccent:#05141a; --baro:#c7b0ff; --alert:#ff6b9a; --scrim:rgba(0,0,0,.62);
 }
 [data-theme="sd-b2"]{
   --bg:#07121b; --panel:#0d1c29; --panel2:#122434; --line:#1f3a52;
@@ -1333,3 +1333,71 @@ body.reduce-motion .buddy,body.reduce-motion .buddy svg{animation:none !importan
 body.reduce-motion :is(.d77sky .stars,.horizon,.breath,.pearl,.glint,.ember){animation:none}
 body.reduce-motion :is(.pcard,.card)::after{animation:none !important}
 body.reduce-motion [data-theme="sd-77-void"] :is(.pcard,.card),body.reduce-motion [data-theme="sd-77-prism"] :is(.phead h1,.sec,.rank,.subhead h1,.lbl.gold,.bar i,.rbar i){animation:none}
+
+/* ======================================================================
+   Birthdays: Hayden (gems, sd-b1) and Sam (frost, sd-b2)
+   ====================================================================== */
+/* Hayden: shards drift and tumble; each one glints as it turns to face you */
+.shard{position:absolute;width:var(--sz);height:calc(var(--sz) * 1.08);animation:sharddrift var(--dd) ease-in-out infinite alternate}
+.shard .tumble{position:absolute;inset:0;display:block;transform:rotate(var(--r0));animation:tumble var(--d) var(--delay) linear infinite;filter:drop-shadow(0 0 7px rgba(79,230,214,.6))}
+.shard svg{width:100%;height:100%;display:block}
+.shard .glint{position:absolute;left:18%;top:8%;width:70%;height:70%;opacity:0;animation:shardglint var(--d) var(--delay) linear infinite;filter:drop-shadow(0 0 4px #fff)}
+@keyframes sharddrift{to{transform:translate(var(--dx),var(--dy))}}
+@keyframes tumble{0%{transform:rotate(var(--r0)) scaleX(1)}25%{transform:rotate(calc(var(--r0) + 45deg)) scaleX(.18)}50%{transform:rotate(calc(var(--r0) + 90deg)) scaleX(1)}
+  75%{transform:rotate(calc(var(--r0) + 135deg)) scaleX(.18)}100%{transform:rotate(calc(var(--r0) + 180deg)) scaleX(1)}}
+@keyframes shardglint{0%,44%,56%,94%,100%{opacity:0;transform:scale(.3) rotate(0)}50%{opacity:1;transform:scale(1) rotate(45deg)}}
+/* Nova: a violet antimatter ring where you tap */
+.tapring{position:fixed;z-index:95;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;pointer-events:none;border:2px solid #b49aff;
+  box-shadow:0 0 10px #8f6bff,inset 0 0 8px rgba(169,139,255,.7);animation:tapring .55s ease-out forwards}
+@keyframes tapring{to{transform:scale(5.5);opacity:0;border-width:.5px}}
+/* Sam: frost spreading in from the corners, and ice crystals forming */
+.frostc{position:absolute;width:min(56vw,260px);height:min(56vw,260px);opacity:.8;filter:drop-shadow(0 0 3px rgba(190,235,255,.55))}
+.frostc svg{width:100%;height:100%;overflow:visible}
+.frostc path{fill:none;stroke:rgba(225,244,255,.8);stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:frostgrow linear forwards}
+body.reduce-motion .frostc path{stroke-dashoffset:0;animation:none}
+.frostc.tl{left:0;top:0}.frostc.tr{right:0;top:0;transform:scaleX(-1)}.frostc.bl{left:0;bottom:var(--navh);transform:scaleY(-1)}.frostc.br{right:0;bottom:var(--navh);transform:scale(-1)}
+@keyframes frostgrow{to{stroke-dashoffset:0}}
+.bd-frost .frostc{animation:frostbreathe 9s 30s ease-in-out infinite}
+@keyframes frostbreathe{50%{opacity:.55}}
+.crystal{position:absolute;width:var(--sz);height:var(--sz);transform:rotate(var(--rot));animation:crystal 9s ease-in-out forwards}
+.crystal svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 3px #9fdcff)}
+.crystal path{fill:none;stroke:#e6f6ff;stroke-width:.9;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:frostgrow 2.4s ease-out forwards}
+@keyframes crystal{0%{opacity:.9}70%{opacity:.75}100%{opacity:0;transform:rotate(var(--rot)) scale(.85)}}
+/* Volt: speed streaks on a page swipe, a spark where you tap */
+.streak{position:absolute;left:-30%;width:var(--len);height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#f5d83a 70%,#fff8c4);box-shadow:0 0 8px #f5d83a;
+  animation:streak .55s var(--delay) ease-out forwards;opacity:0}
+.streak.rev{left:auto;right:-30%;background:linear-gradient(270deg,transparent,#f5d83a 70%,#fff8c4);animation-name:streakr}
+@keyframes streak{10%{opacity:.9}100%{opacity:0;transform:translateX(160vw)}}
+@keyframes streakr{10%{opacity:.9}100%{opacity:0;transform:translateX(-160vw)}}
+.tapspark{position:fixed;z-index:95;width:0;height:0;pointer-events:none}
+.tapspark b{position:absolute;left:0;top:0;width:9px;height:1.6px;border-radius:2px;background:linear-gradient(90deg,#fffbd0,#f5d83a);box-shadow:0 0 6px #f5d83a;transform:rotate(var(--ang));transform-origin:left center;animation:tapspark .4s ease-out forwards}
+@keyframes tapspark{from{opacity:1;translate:0 0}to{opacity:0;translate:calc(cos(var(--ang)) * var(--dist)) calc(sin(var(--ang)) * var(--dist))}}
+/* a little reaction on each tick */
+.tickfx{position:fixed;z-index:95;width:0;height:0;pointer-events:none}
+.tickfx b{position:absolute;left:-2.5px;top:-2.5px;width:5px;height:5px;animation:tickbit .6s ease-out forwards}
+.tickfx.gems b{background:var(--c);transform:rotate(45deg);box-shadow:0 0 6px var(--c)}
+.tickfx.gems .star{position:absolute;left:-13px;top:-13px;width:26px;height:26px;animation:tickstar .55s ease-out forwards;filter:drop-shadow(0 0 5px #4fe6d6)}
+.tickfx.gems .star svg{width:100%;height:100%}
+.tickfx.frost b{width:2px;height:8px;left:-1px;top:-4px;border-radius:1px;background:#e6f6ff;box-shadow:0 0 5px #9fdcff;rotate:var(--ang)}
+.tickfx.frost .ring{position:absolute;left:-10px;top:-10px;width:20px;height:20px;border-radius:50%;border:1.5px solid rgba(220,242,255,.9);box-shadow:0 0 8px #9fdcff;animation:tickring .55s ease-out forwards}
+@keyframes tickbit{from{opacity:1;translate:0 0}to{opacity:0;translate:calc(sin(var(--ang)) * var(--dist)) calc(cos(var(--ang)) * var(--dist) * -1)}}
+@keyframes tickstar{0%{transform:scale(.2) rotate(0);opacity:1}60%{opacity:1}100%{transform:scale(1.2) rotate(90deg);opacity:0}}
+@keyframes tickring{from{transform:scale(.4);opacity:1}to{transform:scale(2.1);opacity:0}}
+/* themed confetti shapes */
+.confetti.shape{width:14px;height:14px;border-radius:0;background:none}
+.confetti.shape svg{width:100%;height:100%;display:block;filter:drop-shadow(0 0 3px rgba(255,255,255,.35))}
+/* the birthday banner: a cut gem for Hayden, a pane of frost for Sam */
+.bdbanner.bd-gems{border:0;border-radius:0;padding:14px 46px 14px 20px;color:#ebfdff;
+  clip-path:polygon(14px 0,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,14px 100%,0 50%);
+  background:linear-gradient(115deg,rgba(255,255,255,.14) 0 22%,transparent 22% 48%,rgba(255,255,255,.08) 48% 60%,transparent 60%),linear-gradient(90deg,#0d4a55,#20335f 55%,#3b2368);
+  box-shadow:none;filter:drop-shadow(0 0 1px #4fe6d6) drop-shadow(0 6px 18px rgba(79,230,214,.3))}
+.bdbanner.bd-frost{border:1px solid rgba(220,242,255,.75);color:#f2fbff;
+  background:radial-gradient(circle at 0 0,rgba(255,255,255,.35),transparent 40px),radial-gradient(circle at 100% 100%,rgba(255,255,255,.28),transparent 40px),linear-gradient(135deg,rgba(70,125,165,.94),rgba(22,48,78,.96));
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 0 0 1px rgba(111,208,255,.25),0 8px 26px rgba(80,170,230,.3),inset 0 1px 0 rgba(255,255,255,.5)}
+.bdbanner.bd-frost button,.bdbanner.bd-gems button{color:#dcefff}
+body.reduce-motion :is(.shard,.shard .tumble,.shard .glint,.bd-frost .frostc){animation:none}
+/* glassy cards on both birthdays, so the shards and frost show through softly */
+[data-theme="sd-b1"]{--panel:rgba(10,31,39,.8);--panel2:rgba(14,39,48,.84);--chead1:rgba(14,39,48,.84);--chead2:rgba(10,31,39,.8);--hvbg:rgba(20,26,53,.8)}
+[data-theme="sd-b2"]{--panel:rgba(13,28,41,.82);--panel2:rgba(18,36,52,.86);--chead1:rgba(16,33,47,.86);--chead2:rgba(13,28,41,.82)}
+:is([data-theme="sd-b1"],[data-theme="sd-b2"]) :is(.pcard,.card,.summary,.subhead,.mbar,.modal .card){-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+:is([data-theme="sd-b1"],[data-theme="sd-b2"]) .bnav{background:rgba(8,20,28,.9)}
