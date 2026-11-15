@@ -117,14 +117,14 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'wrc' }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
-          VERSION_NAME: 1.0.${{ github.run_number }}
+          VERSION_NAME: 1.1.${{ github.run_number }}
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          V="1.0.${{ github.run_number }}"
+          V="1.1.${{ github.run_number }}"
           F="WarframeRelicCompanion-$V.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$F"
           cat > notes.md <<NOTES

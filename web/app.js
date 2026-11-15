@@ -12,7 +12,8 @@ const SCHEMA = 1;
 const TRADE_LIMIT = 170;
 const LIVE_REFRESH_MS = 5 * 60 * 1000;
 const EDGE_PX = 16;
-const PAGE_MAIN = 3;
+const PG = { profile: 0, coll: 1, home: 2, relics: 3, vendors: 4 }; // bottom bar, left to right
+const PAGE_MAIN = PG.coll;
 
 const THEMES = [
   ["orokin-dark", "Orokin Dark", ["#0b0f14", "#d9b44a", "#4fd1c5"]],
@@ -36,14 +37,14 @@ const SHOW_SWITCHES = [
   ["get", "Acquisition source"],
   ["whatsnew", "What's new pop-up"],
 ];
-const START_PAGES = [[0, "Rotating"], [1, "Relic Runs"], [2, "Favorites"], [3, "Main"]];
+const START_PAGES = [[PG.home, "Home"], [PG.coll, "Collection"], [PG.relics, "Relics"], [PG.vendors, "Vendors"], [PG.profile, "Profile"]];
 const CATS = [
   ["all", "All"], ["warframes", "Warframes"], ["weapons", "Weapons"], ["vehicles", "Vehicles"], ["archweapons", "Arch-weapons"],
   ["companions", "Companions"], ["modweapons", "Modular weapons"], ["modcompanions", "Modular companions"], ["amps", "Amps"], ["tauron", "Tauron Strikes"],
 ];
 const CAT_LABEL = Object.fromEntries(CATS);
 const CAT_INTRO = {
-  all: "Everything that counts toward mastery. Base holds the regular versions and their variants; Prime holds every Prime set. Tap a star to add something to Favorites.",
+  all: "Everything that counts toward mastery. Base holds the regular versions and their variants; Prime holds every Prime set. Tap an item for its own page, or its star to follow it on Home.",
   warframes: "Every Warframe. Tap a card's parts as you collect them, then Mastered once it's rank 30.",
   weapons: "Primary, Secondary and Melee weapons. Variants like MK1, Vandal, Wraith and Kuva sit in their base weapon's card.",
   vehicles: "Archwings, Necramechs, K-Drives and the Railjack's Plexus.",
@@ -65,7 +66,7 @@ const RAR_CHANCE = { C: "25.3% → 16.7%", U: "11% → 20%", R: "2% → 10%" };
 const DEFAULT_SETTINGS = {
   theme: "orokin-dark", farm: "both", mainSort: "type", collapsed: {}, mainOpen: {}, slotOpen: {}, runsOpen: {}, rotOpen: {}, hideVend: {},
   show: { mods: true, chances: true, vaulted: true, resurgence: true, variants: true, oracle: true, tips: true, get: true, whatsnew: true },
-  reduceMotion: false, compact: false, textSize: 100, startPage: 3, fissMode: "normal",
+  reduceMotion: false, compact: false, textSize: 100, startPage: 2, fissMode: "normal", collMode: "all", starOnly: false, nav2: 1,
 };
 const native = window.WRC || null; // Android bridge, absent in a normal browser
 
@@ -95,6 +96,12 @@ function left(ms) {
   return `${m}m ${String(s).padStart(2, "0")}s`;
 }
 const until = ms => `<span data-until="${ms}">${left(ms)}</span>`;
+function shortLeft(ms) { // "3d 4h", "2h 5m", "18m": for countdowns at a glance
+  const s = Math.max(0, Math.floor((ms - Date.now()) / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+const shortUntil = ms => `<span data-short="${ms}">${shortLeft(ms)}</span>`;
 function fmtDate(ms) {
   try { return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch (e) { return ""; }
 }
@@ -107,10 +114,14 @@ function loadState() {
 }
 function normaliseState(s) {
   s = s && typeof s === "object" ? s : {};
-  const st = s.settings || {};
+  const st = { ...(s.settings || {}) };
+  if (s.settings && !st.nav2) { // 1.0's four swipe pages: Rotating, Relic Runs, Favorites, Main
+    st.startPage = { 0: PG.vendors, 1: PG.relics, 2: PG.coll, 3: PG.home }[st.startPage] ?? PG.home;
+    st.nav2 = 1;
+  }
   return {
     ticks: s.ticks || {}, stars: s.stars || {}, mastered: s.mastered || {}, alerts: s.alerts || {},
-    hvMin: !!s.hvMin, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
+    hvMin: !!s.hvMin, focus: s.focus && typeof s.focus === "object" ? s.focus : null, secrets: s.secrets || {}, banners: s.banners || {}, unlocked: s.unlocked || {}, weekly: { t: (s.weekly || {}).t || {}, c: (s.weekly || {}).c || [] },
     xm: s.xm || {}, relicCounts: s.relicCounts || {}, partCounts: s.partCounts || {}, scanAt: s.scanAt || {}, hvOwned: !!s.hvOwned,
     building: s.building || {}, built: s.built || {}, scanFiles: s.scanFiles || {}, tourDone: !!s.tourDone, newsSeen: s.newsSeen || "",
     settings: { ...DEFAULT_SETTINGS, ...st, collapsed: { ...(st.collapsed || {}) }, mainOpen: { ...(st.mainOpen || {}) }, slotOpen: { ...(st.slotOpen || {}) }, runsOpen: { ...(st.runsOpen || {}) }, rotOpen: { ...(st.rotOpen || {}) }, hideVend: { ...(st.hideVend || {}) }, show: { ...DEFAULT_SETTINGS.show, ...(st.show || {}) } },
@@ -133,6 +144,7 @@ function setData(d, at, src) {
   ALL = ITEMS.concat(BASE);
   BYNAME = {}; BYID = {};
   ALL.forEach(it => { delete it._units; if (!BYNAME[it.n]) BYNAME[it.n] = it; BYID[it.id] = it; });
+  RELIC_REW = null; // Focus mode's reward lists are rebuilt from the new data
 }
 const counts = it => it.k !== "t"; // Tauron Strikes don't count toward mastery
 const grpItems = gid => BASE.filter(i => i.grp === gid);
@@ -501,44 +513,47 @@ function infoHTML(it) {
   return h;
 }
 
-/* ---------- PAGE: MAIN ----------
-   Two dropdowns, Base then Prime, under one pinned bar: category, search and a filter button. */
+/* ---------- PAGE: COLLECTION ----------
+   One flat list: All, or Base / Prime, with a Starred filter and category chips. Each row opens
+   the item's own page; sections never nest deeper than their heading. */
 let mainCat = "all", mainQuery = "", showMastered = false, hideDone = false, mainSlot = ""; // mainSlot: just Primary, Secondary...
 const FILTER_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>`;
+const STAR_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>`;
+const STAR_OFF_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>`;
+const starSvg = on => on ? STAR_SVG : STAR_OFF_SVG;
+const SORTS = [["type", "By section"], ["az", "A–Z"], ["done", "Closest to done"], ["vault", "Vaulting soonest"]];
 const catsWithItems = () => CATS.filter(([k]) => k === "all" || ALL.some(it => (it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat) === k));
+const collPool = () => S().collMode === "base" ? BASE : S().collMode === "prime" ? ITEMS : ALL;
 function buildMain() {
-  $("#main").innerHTML = `<header><h1 id="catTitle">All</h1><p id="catIntro"></p></header>
+  $("#main").innerHTML = `<header class="phead"><div class="ptitle"><h1>Collection</h1><span class="pcount" id="collCnt"></span></div><p id="catIntro"></p></header>
     <div class="mbar" id="mbar"><div class="mbarrow">
-      <label class="catwrap"><span class="sr">Category</span><select class="catsel" id="catSel"></select></label>
-      <input class="search" id="search" type="search" placeholder="Search" autocomplete="off" aria-label="Search">
+      <input class="search" id="search" type="search" placeholder="Search the collection" autocomplete="off" aria-label="Search the collection">
       <button class="iconbtn" id="filtBtn" aria-label="Sort and filters" aria-expanded="false">${FILTER_SVG}</button></div>
       <div class="fpanel hidden" id="fpanel">
         <div class="controls" id="slotCtl"></div>
-        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span><button class="chip" data-sort="type">By section</button><button class="chip" data-sort="az">A–Z</button></div>
+        <div class="controls" id="sortCtl"><span class="ctlk">Sort</span>${SORTS.map(([k, l]) => `<button class="chip" data-sort="${k}">${l}</button>`).join("")}</div>
         <div class="controls"><button class="chip ghost" id="showM" aria-pressed="false">Show mastered</button>
-        <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button></div></div></div>
+        <button class="chip ghost" id="hideD" aria-pressed="false">Hide complete</button></div></div>
+      <div class="modegrid" role="group" aria-label="Which items"><button data-cmode="all" class="mall">All</button><button data-cmode="base">Base</button><button data-cmode="prime">Prime</button></div>
+      <div class="catchips" id="catChips"></div></div>
     <div id="mainList"></div>
     <footer>Data from the <a href="https://wiki.warframe.com/" target="_blank">WARFRAME Wiki</a>, DE's official drop tables and WFCD community data. Resources like Orokin Cells and credits aren't listed. To master an item you still have to level it to rank 30 after you build it.</footer>`;
-  fillCats();
-  $("#catSel").addEventListener("change", e => { mainCat = e.target.value; mainSlot = ""; renderMain(); $("#pg-main").scrollTop = 0; });
   $("#filtBtn").addEventListener("click", e => {
     const p = $("#fpanel"), open = p.classList.toggle("hidden") === false;
     e.currentTarget.setAttribute("aria-expanded", open);
   });
-  $("#slotCtl").addEventListener("click", e => {
-    const b = e.target.closest("[data-slotf]"); if (!b) return;
-    mainSlot = b.dataset.slotf; renderMain(); $("#pg-main").scrollTop = 0;
+  $("#mbar").addEventListener("click", e => {
+    const sl = e.target.closest("[data-slotf]");
+    if (sl) { mainSlot = sl.dataset.slotf; renderMain(); $("#pg-coll").scrollTop = 0; return; }
+    const so = e.target.closest("[data-sort]");
+    if (so) { S().mainSort = so.dataset.sort; save(); renderMain(); return; }
+    const md = e.target.closest("[data-cmode]");
+    if (md) { S().collMode = md.dataset.cmode; save(); renderMain(); $("#pg-coll").scrollTop = 0; return; }
+    const st = e.target.closest("[data-staronly]");
+    if (st) { S().starOnly = !S().starOnly; save(); renderMain(); $("#pg-coll").scrollTop = 0; return; }
+    const c = e.target.closest("[data-cat]");
+    if (c) { mainCat = mainCat === c.dataset.cat ? "all" : c.dataset.cat; mainSlot = ""; renderMain(); $("#pg-coll").scrollTop = 0; } // tap the chosen category again for everything
   });
-  $("#sortCtl").addEventListener("click", e => {
-    const b = e.target.closest("[data-sort]"); if (!b) return;
-    S().mainSort = b.dataset.sort; save(); renderMain();
-  });
-  // dropdowns (Base / Prime, weapon slots) remember whether they're open
-  $("#mainList").addEventListener("toggle", e => {
-    const d = e.target; if (!d.matches || mainQuery) return;
-    if (d.matches("details.secgrp")) { S().slotOpen[d.dataset.slot] = d.open ? 1 : 0; save(); }
-    if (d.matches("details.mgrp")) { S().mainOpen[d.dataset.mg] = d.open ? 1 : 0; save(); }
-  }, true);
   $("#search").addEventListener("input", e => {
     if (secretSearch(e.target.value)) { e.target.value = ""; e.target.blur(); mainQuery = ""; renderMain(); return; }
     mainQuery = e.target.value.trim().toLowerCase(); renderMain();
@@ -546,26 +561,22 @@ function buildMain() {
   $("#showM").addEventListener("click", e => { showMastered = !showMastered; e.currentTarget.setAttribute("aria-pressed", showMastered); renderMain(); });
   $("#hideD").addEventListener("click", e => { hideDone = !hideDone; e.currentTarget.setAttribute("aria-pressed", hideDone); renderMain(); });
 }
-function fillCats() {
-  const sel = $("#catSel"); if (!sel) return;
-  const list = catsWithItems();
-  if (!list.some(([k]) => k === mainCat)) mainCat = "all";
-  sel.innerHTML = list.map(([k, l]) => `<option value="${k}"${k === mainCat ? " selected" : ""}>${l}</option>`).join("");
-}
 const catOf = it => it.grp && GROUPS[it.grp] ? GROUPS[it.grp].cat : it.cat;
 const slotOf = it => it.grp && GROUPS[it.grp] ? GROUPS[it.grp].slot : it.slot;
+const isStarred = it => !!(state.stars[it.id] || (it.grp && state.stars[it.grp]));
 function passes(it) {
   const q = mainQuery;
   if (mainCat !== "all" && catOf(it) !== mainCat) return false;
   if (mainSlot && slotOf(it) !== mainSlot) return false;
+  if (S().starOnly && !isStarred(it)) return false;
   // searching by name finds an item even if it's mastered or complete: you asked for it
-  if (state.mastered[it.id] && !showMastered && !q) return false;
+  if (state.mastered[it.id] && !showMastered && !q && !S().starOnly) return false;
   if (hideDone && !q && it.k !== "m") { const { n, g } = progress(it); if (n && g === n) return false; }
   if (q && !it.n.toLowerCase().includes(q) && !(it.grp && GROUPS[it.grp] && GROUPS[it.grp].n.toLowerCase().includes(q))
     && !unitsOf(it).some(u => (u.full || "").toLowerCase().includes(q))) return false;
   return true;
 }
-/* Display entries: one per card. Base items in a group share one entry. */
+/* Display entries: one per row. Base items in a group share one entry. */
 function entriesOf(list) {
   const m = new Map();
   list.forEach(it => {
@@ -575,71 +586,76 @@ function entriesOf(list) {
   });
   return [...m.values()].sort((a, b) => a.n.localeCompare(b.n));
 }
+/* An entry's numbers: parts collected for one item, or pieces mastered (collected) for a group */
+function entryStat(e) {
+  if (e.g) {
+    const t = e.items[0].k === "t", all = grpItems(e.key);
+    const got = all.filter(i => t ? isTicked(unitsOf(i)[0]) : state.mastered[i.id]).length;
+    return { got, tot: all.length, txt: `${got} / ${all.length}`, done: got === all.length && all.length > 0 };
+  }
+  const it = e.items[0], { n, g } = progress(it), isM = !!state.mastered[it.id];
+  if (isM) return { got: 1, tot: 1, txt: "Mastered", done: true, m: true };
+  if (it.k === "m") return { got: 0, tot: 1, txt: "", done: false };
+  return { got: g, tot: n, txt: n ? `${g} / ${n}` : "", done: n > 0 && g === n };
+}
 function sectionsFor(entries) {
-  const secs = new Map(), az = S().mainSort === "az"; // A–Z: one list, no headings, in any category
-  const one = mainCat !== "all" && new Set(entries.map(e => e.slot)).size > 1;
-  const key = e => az ? null : mainCat === "all" ? (SLOTTED.has(e.cat) ? `${CAT_LABEL[e.cat]} · ${e.slot || "Other"}` : CAT_LABEL[e.cat] || "Other") : one ? e.slot || "Other" : null;
+  const secs = new Map(), flat = S().mainSort !== "type"; // A–Z and the other sorts: one list, no headings
+  const key = e => flat ? null : SLOTTED.has(e.cat) ? (e.slot || "Other") : CAT_LABEL[e.cat] || "Other";
   entries.forEach(e => { const k = key(e); if (!secs.has(k)) secs.set(k, { cat: e.cat, list: [] }); secs.get(k).list.push(e); });
-  const order = (k, v) => k == null ? 0 : CATS.findIndex(c => c[0] === v.cat) * 100 + Math.max(0, SLOT_ORDER.indexOf(k.split(" · ").pop()));
+  const order = (k, v) => k == null ? 0 : CATS.findIndex(c => c[0] === v.cat) * 100 + Math.max(0, SLOT_ORDER.indexOf(k));
   return [...secs.entries()].sort((a, b) => order(a[0], a[1]) - order(b[0], b[1]) || String(a[0]).localeCompare(String(b[0])));
 }
-const entryHTML = e => e.g ? gcardHTML(e) : cardHTML(e.items[0]);
 const entryReady = e => e.items.some(readyToBuild);
-function listHTML(mg, items) {
-  const entries = entriesOf(items);
-  if (!entries.length) return `<p class="empty">${mainQuery ? "Nothing matches that search." : "Nothing left here. Everything's mastered!"}</p>`;
+const favMissing = e => e.items.filter(i => counts(i) && active(i)).reduce((a, i) => { const { n, g } = progress(i); return a + (i.k === "m" ? 1 : n - g); }, 0);
+const favVault = e => { const ends = e.items.flatMap(i => alertsFor(i).map(a => a.end || 9e15)); return ends.length ? Math.min(...ends) : Infinity; };
+function sortEntries(entries) {
+  const k = S().mainSort;
+  const by = { done: (a, b) => favMissing(a) - favMissing(b), vault: (a, b) => favVault(a) - favVault(b) }[k];
+  return by ? entries.sort((a, b) => by(a, b) || a.n.localeCompare(b.n)) : entries;
+}
+function rowHTML(e) {
+  const st = entryStat(e), it = e.items[0], on = !!state.stars[e.key];
+  const ready = entryReady(e), b = !e.g && (buildTag(it));
+  const pct = st.tot ? 100 * st.got / st.tot : 0;
+  return `<div class="crow${st.m ? " m" : ""}${st.done && !st.m ? " done" : ""}" data-row="${esc(e.key)}">
+    <button class="cmain" data-open="${esc(e.key)}"><span class="ctl"><b>${esc(e.n)}</b><span class="cc">${b || esc(st.txt)}</span></span>${st.tot && !st.m ? `<span class="rbar"><i style="width:${Math.max(2, pct)}%"></i></span>` : ""}</button>
+    ${ready ? `<button class="chip build" data-build="${(e.items.find(readyToBuild) || it).id}">Building</button>` : ""}${!e.g ? vwHTML(it) : ""}
+    <button class="star${on ? " on" : ""}" data-star="${esc(e.key)}" aria-label="${on ? "Unstar" : "Star"} ${esc(e.n)}" aria-pressed="${on}">${starSvg(on)}</button></div>`;
+}
+function listHTML(items) {
+  const entries = sortEntries(entriesOf(items));
+  if (!entries.length) return `<p class="empty">${mainQuery ? "Nothing matches that search." : S().starOnly ? "Nothing starred here yet. Tap the star on any item." : "Nothing left here. Everything's mastered!"}</p>`;
   let h = "";
   const ready = entries.filter(entryReady);
-  if (ready.length) h += `<h2 class="sec rtbsec">Ready to build</h2><div class="grid">${ready.map(entryHTML).join("")}</div>`;
+  if (ready.length) h += `<h2 class="sec rtbsec">Ready to build</h2><div class="rows">${ready.map(rowHTML).join("")}</div>`;
   sectionsFor(entries.filter(e => !entryReady(e))).forEach(([k, v]) => {
-    const grid = `<div class="grid">${v.list.map(entryHTML).join("")}</div>`;
-    const ck = `${mg}:${k}`;
-    if (k && SLOTTED.has(v.cat)) {
-      const open = mainQuery || S().slotOpen[ck]; // closed the first time, then as you left it
-      h += `<details class="secgrp" data-slot="${esc(ck)}"${open ? " open" : ""}><summary><h2 class="sec">${esc(k)}</h2><span class="seccnt">${v.list.length}</span></summary>${grid}</details>`;
-    } else h += (k ? `<h2 class="sec">${esc(k)}</h2>` : "") + grid;
+    h += (k ? `<h2 class="sec">${esc(k)}<span class="seccnt">${v.list.length}</span></h2>` : "") + `<div class="rows">${v.list.map(rowHTML).join("")}</div>`;
   });
   return h;
 }
 function mgCount(pool) {
   const m = pool.filter(counts), got = m.filter(it => state.mastered[it.id]).length;
-  return { got, tot: m.length, txt: m.length ? `${got} / ${m.length} mastered` : `${pool.filter(it => progress(it).g).length} / ${pool.length} collected` };
+  return { got, tot: m.length, txt: m.length ? `${got.toLocaleString()} / ${m.length.toLocaleString()} mastered` : `${pool.filter(it => progress(it).g).length} / ${pool.length} collected` };
 }
-const mgPool = list => list.filter(it => mainCat === "all" || catOf(it) === mainCat);
 function renderMain() {
   if (!$("#mainList")) return;
-  fillCats();
-  $("#catTitle").textContent = mainSlot || CAT_LABEL[mainCat] || "All";
+  const pool = collPool().filter(it => mainCat === "all" || catOf(it) === mainCat);
+  $("#collCnt").textContent = ALL.length ? mgCount(pool).txt : "";
   $("#catIntro").textContent = CAT_INTRO[mainCat] || "";
-  let h = "";
-  if (!ALL.length) h = `<p class="empty">Loading the item list…</p>`;
-  else [["base", "Base", BASE], ["prime", "Prime", ITEMS]].forEach(([mg, title, list]) => {
-    const pool = mgPool(list); if (!pool.length) return;
-    const c = mgCount(pool), open = !!mainQuery || !!S().mainOpen[mg];
-    const items = pool.filter(passes);
-    h += `<details class="mgrp" data-mg="${mg}"${open ? " open" : ""}><summary><div class="mgt"><h2>${title}</h2><span class="mgc" data-mgc="${mg}">${c.txt}</span><span class="chev" aria-hidden="true">▾</span></div>
-      <div class="bar"><i data-mgbar="${mg}" style="width:${c.tot ? 100 * c.got / c.tot : 0}%"></i></div><p class="secsub">${MG_LINE[mg]}</p></summary>
-      <div class="mgbody">${open ? listHTML(mg, items) : ""}</div></details>`;
-  });
+  const cats = catsWithItems(); if (!cats.some(([k]) => k === mainCat)) mainCat = "all";
+  $("#catChips").innerHTML = `<button class="chip star-chip" data-staronly aria-pressed="${!!S().starOnly}">${STAR_SVG}Starred</button>`
+    + cats.filter(([k]) => k !== "all").map(([k, l]) => `<button class="chip" data-cat="${k}" aria-pressed="${mainCat === k}">${l}</button>`).join("");
+  document.querySelectorAll("[data-cmode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.cmode === (S().collMode || "all")));
   // Weapons and Arch-weapons can be narrowed to one slot
   const slots = SLOTTED.has(mainCat) ? SLOT_ORDER.filter(sl => ALL.some(it => catOf(it) === mainCat && slotOf(it) === sl)) : [];
   if (!slots.includes(mainSlot)) mainSlot = "";
   $("#slotCtl").innerHTML = slots.length ? `<span class="ctlk">Show</span>` + [["", "All"], ...slots.map(sl => [sl, sl])].map(([k, l]) => `<button class="chip" data-slotf="${k}" aria-pressed="${mainSlot === k}">${l}</button>`).join("") : "";
   $("#slotCtl").classList.toggle("hidden", !slots.length);
-  const busy = !!mainSlot || S().mainSort === "az" || showMastered || hideDone; // a dot on the button while any filter is on
+  const busy = !!mainSlot || S().mainSort !== "type" || showMastered || hideDone; // a dot on the button while any filter is on
   $("#filtBtn").classList.toggle("on", busy);
   $("#filtBtn").setAttribute("aria-label", `Sort and filters${busy ? " (some on)" : ""}`);
-  const sc = $("#sortCtl");
-  sc.querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
-  $("#mainList").innerHTML = h;
-  $("#mainList").querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
-}
-/* A dropdown's cards are only drawn once it's opened, so a long list stays quick */
-function fillMg(d) {
-  const mg = d.dataset.mg, body = d.querySelector(".mgbody");
-  if (!d.open || body.childElementCount) return;
-  body.innerHTML = listHTML(mg, mgPool(mg === "base" ? BASE : ITEMS).filter(passes));
-  body.querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
+  $("#sortCtl").querySelectorAll("[data-sort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.sort === S().mainSort));
+  $("#mainList").innerHTML = !ALL.length ? `<p class="empty">Loading the item list…</p>` : listHTML(pool.filter(passes));
 }
 /* ---------- MASTERY RANK ESTIMATE ----------
    Mastery points for each item marked Mastered: weapons 3,000 (Kuva, Tenet and Coda weapons
@@ -675,19 +691,15 @@ function extraXP() {
 }
 function renderMR() {
   const box = $("#mrBox"); if (!box) return;
-  let items = 0, n = 0;
-  ALL.forEach(it => { if (state.mastered[it.id]) { items += masteryXP(it); n++; } });
-  const ex = extraXP(), extra = Object.values(ex).reduce((a, b) => a + b, 0), adj = mrAdj(), xp = Math.max(0, items + extra + adj);
-  let r = 0; while (mrNeed(r + 1) <= xp) r++;
-  const lo = mrNeed(r), hi = mrNeed(r + 1);
-  const sel = $("#mrRank"); if (sel && !sel.dataset.touched) sel.value = r; // start the picker at the app's own estimate
-  box.innerHTML = `<div class="sumrow"><span>Estimated Mastery Rank</span><b>${mrLabel(r)}</b></div>
-    <div class="sumsub">${xp.toLocaleString()} mastery points · ${(hi - xp).toLocaleString()} more to ${mrLabel(r + 1)}</div>
-    <div class="bar"><i style="width:${Math.min(100, 100 * (xp - lo) / (hi - lo))}%"></i></div>
-    <div class="mrsplit"><span>Items mastered (${n})</span><b>${items.toLocaleString()}</b>
-      ${XM.charts.map(([k, l]) => `<span>${l}</span><b>${ex[k].toLocaleString()}</b>`).join("")}
-      <span>Intrinsics</span><b>${(ex.rj + ex.dr).toLocaleString()}</b>
-      ${adj ? `<span>Matched to your game</span><b>${adj > 0 ? "+" : "−"}${Math.abs(adj).toLocaleString()}</b>` : ""}</div>`;
+  const m = mrStats();
+  const sel = $("#mrRank"); if (sel && !sel.dataset.touched) sel.value = m.r; // start the picker at the app's own estimate
+  box.innerHTML = `<div class="sumrow"><span>Estimated Mastery Rank</span><b>${mrLabel(m.r)}</b></div>
+    <div class="sumsub">${m.xp.toLocaleString()} mastery points · ${(m.hi - m.xp).toLocaleString()} more to ${mrLabel(m.r + 1)}</div>
+    <div class="bar"><i style="width:${m.pct}%"></i></div>
+    <div class="mrsplit"><span>Items mastered (${m.n})</span><b>${m.items.toLocaleString()}</b>
+      ${XM.charts.map(([k, l]) => `<span>${l}</span><b>${m.ex[k].toLocaleString()}</b>`).join("")}
+      <span>Intrinsics</span><b>${(m.ex.rj + m.ex.dr).toLocaleString()}</b>
+      ${m.adj ? `<span>Matched to your game</span><b>${m.adj > 0 ? "+" : "−"}${Math.abs(m.adj).toLocaleString()}</b>` : ""}</div>`;
 }
 /* "Match my game": the game counts things the app can't see, like ranks gained on gear you later
    sold. Matching keeps the difference between the game's total and the app's own count. */
@@ -702,108 +714,21 @@ function mrMatch() {
   const msg = $("#mrMsg");
   if (!(left > 0) || left > mrNeed(r + 1) - mrNeed(r)) { if (msg) { msg.className = "codemsg bad"; msg.textContent = `Type the points the game says you need for ${mrLabel(r + 1)}.`; } return; }
   state.xm = state.xm || {}; state.xm.adj = mrNeed(r + 1) - left - mrOwnXP();
-  save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true;
+  save(); renderSub(); renderProfile(); renderHome();
 }
 function xmSet(t, tidy) {
   const max = +t.max || 0, v = Math.max(0, Math.min(max, Math.floor(+t.value || 0)));
   state.xm = state.xm || {}; (state.xm[t.dataset.xm] = state.xm[t.dataset.xm] || {})[t.dataset.xf] = v;
   if (tidy && t.value !== "" && +t.value !== v) t.value = v;
-  save(); renderMR();
+  save(); renderMR(); renderProfile();
 }
-function mrSecHTML() {
-  const num = (k, f, max, label) => `<div class="drow xmrow"><label for="xm-${k}-${f}">${label}</label><input id="xm-${k}-${f}" type="number" inputmode="numeric" min="0" max="${max}" value="${xmGet(k, f) || ""}" placeholder="0" data-xm="${k}" data-xf="${f}"><span class="xmmax">/ ${max}</span></div>`;
-  return `<details class="dsec" id="mrSec"><summary>Mastery Rank</summary><div class="dbody">
-    <div class="summary mrbox" id="mrBox"></div>
-    <p class="dnote">Items count once you mark them Mastered on Main. Add the rest below; your profile in the game shows how much of each chart you've cleared.</p>
-    ${XM.charts.map(([k, l]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All done</button></div>${k === "sp" ? `<p class="dnote">Got the Steel Path? Then the Star Chart is done: tapping All done there fills it in.</p>` : ""}${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
-    ${XM.intr.map(([k, l, trees]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All maxed</button></div>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
-    <p class="dnote">Each node pays once the first time you clear it, and again on the Steel Path; each Junction pays 1,000. Every Intrinsic rank pays 1,500, up to rank 10 in each tree. Node points vary a little from node to node, so partial charts are an estimate.</p>
-    <div class="xmhead"><h4>Match my game</h4>${mrAdj() ? `<button class="chip ghost" id="mrClear">Undo</button>` : ""}</div>
-    <p class="dnote">The game also counts things the app can't see, like ranks gained on gear you levelled and then sold. Enter your rank and the points your profile says you need for the next one, then tap Match. The app keeps the difference; if you later fix a tick that caused it, match again.</p>
-    <div class="drow xmrow"><label for="mrRank">Your rank</label><select id="mrRank">${Array.from({ length: 81 }, (_, r) => `<option value="${r}"${r === mrNow() ? " selected" : ""}>${mrLabel(r)}</option>`).join("")}</select></div>
-    <div class="drow xmrow"><label for="mrLeft">Points to next</label><input id="mrLeft" type="text" inputmode="numeric" placeholder="97,862"></div>
-    <button class="chip" id="mrGo">Match</button><p class="codemsg" id="mrMsg"></p>
-  </div></details>`;
-}
-function mainSummary() {
-  renderMR();
-  [["base", BASE], ["prime", ITEMS]].forEach(([mg, list]) => {
-    const el = document.querySelector(`[data-mgc="${mg}"]`); if (!el) return;
-    const c = mgCount(mgPool(list));
-    el.textContent = c.txt;
-    const bar = document.querySelector(`[data-mgbar="${mg}"]`); if (bar) bar.style.width = (c.tot ? 100 * c.got / c.tot : 0) + "%";
-  });
-}
+function mainSummary() { renderMR(); }
+/* "Is in the Prime list" links and other jumps open the item's own page */
 function jumpTo(id) {
   const it = BYID[id]; if (!it) return;
-  if (mainCat !== "all" && catOf(it) !== mainCat) mainCat = "all";
-  if (state.mastered[id]) showMastered = true;
-  mainQuery = ""; $("#search").value = ""; hideDone = false;
-  S().mainOpen[it.b ? "base" : "prime"] = 1; save();
-  renderMain(); goPage(PAGE_MAIN, true);
-  setTimeout(() => {
-    const c = document.querySelector(`#mainList [data-item="${id}"]`); if (!c) return;
-    const sg = c.closest("details.secgrp"); if (sg && !sg.open) sg.open = true;
-    c.scrollIntoView({ block: "center", behavior: S().reduceMotion ? "auto" : "smooth" });
-    c.classList.add("flash"); setTimeout(() => c.classList.remove("flash"), 1600);
-  }, 120);
+  openSub("item", it.grp && GROUPS[it.grp] ? it.grp : id);
 }
 
-/* ---------- PAGE: FAVORITES ---------- */
-const FAV_SORTS = [["az", "A–Z"], ["done", "Closest to done"], ["vault", "Vaulting soonest"]];
-function buildFavs() {
-  $("#favs").innerHTML = `<header><h1>Favorites</h1><p>Every item you've starred, Base and Prime. Tap one for how to get it, its relics and farms.</p></header>
-    <section class="summary"><div class="sumrow"><span>Starred parts collected</span><b id="favSum">0 / 0</b></div>
-      <div class="sumsub" id="favSub"></div><div class="bar"><i id="favBar"></i></div>
-      <div class="fbarrow"><span class="ctlk">Sorted <b id="favSortName"></b></span><button class="iconbtn" id="favFilt" aria-label="Sort favorites" aria-expanded="false">${FILTER_SVG}</button></div>
-      <div class="fpanel hidden" id="favPanel"><div class="controls" id="favSort"><span class="ctlk">Sort</span>${FAV_SORTS.map(([k, l]) => `<button class="chip" data-fsort="${k}">${l}</button>`).join("")}</div></div></section>
-    <div id="favList"></div>
-    <details class="tdd" id="tradeDD"><summary><h2 class="sec">Trade chat shortcuts</h2><span class="seccnt" id="tradeCnt"></span><span class="chev" aria-hidden="true">▾</span></summary>
-      <p class="secsub">Ready-made "want to buy" messages for the parts you're missing on starred Primes. Each stays under ${TRADE_LIMIT} characters.</p>
-      <div id="trade"></div>
-      <h3 class="sub3">Write your own</h3>
-      <p class="secsub">Type what you're after, one item at a time. Pick the proper name from the suggestions; the app adds the [brackets] and splits long lists to fit chat.</p>
-      <div class="controls" id="tbMode"><button class="chip" data-tbmode="WTB">WTB</button><button class="chip" data-tbmode="WTS">WTS</button></div>
-      <div class="tbin"><input class="search" id="tbIn" type="text" placeholder="Add an item, e.g. ash prime systems" autocomplete="off" aria-label="Item to add" list="tbList"><datalist id="tbList"></datalist>
-        <button class="chip" id="tbAdd">Add</button></div><span class="toast" data-toast></span>
-      <div class="tbchips" id="tbChips"></div><div id="tbOut"></div></details>
-    <footer>Tap Copy, then paste into trade chat. Duplicates show as x2.</footer>`;
-  $("#favFilt").addEventListener("click", e => { const open = $("#favPanel").classList.toggle("hidden") === false; e.currentTarget.setAttribute("aria-expanded", open); });
-  $("#favSort").addEventListener("click", e => { const b = e.target.closest("[data-fsort]"); if (!b) return; S().favSort = b.dataset.fsort; save(); renderFavs(); });
-  $("#tradeDD").addEventListener("toggle", e => { S().tradeOpen = e.target.open ? 1 : 0; save(); });
-  bindTradeBuilder();
-}
-const favMissing = e => e.items.filter(i => counts(i) && active(i)).reduce((a, i) => { const { n, g } = progress(i); return a + (i.k === "m" ? 1 : n - g); }, 0);
-const favVault = e => { const ends = e.items.flatMap(i => alertsFor(i).map(a => a.end || 9e15)); return ends.length ? Math.min(...ends) : Infinity; };
-function favEntries(list) {
-  return entriesOf(list.filter(it => state.stars[it.id] || (it.grp && state.stars[it.grp])));
-}
-function sortFav(entries) {
-  const k = S().favSort || "az";
-  const by = { az: () => 0, done: (a, b) => favMissing(a) - favMissing(b), vault: (a, b) => favVault(a) - favVault(b) }[k] || (() => 0);
-  return entries.sort((a, b) => by(a, b) || a.n.localeCompare(b.n));
-}
-function renderFavs() {
-  const base = sortFav(favEntries(BASE)), prime = sortFav(favEntries(ITEMS));
-  let h = "";
-  if (base.length) h += `<h2 class="sec">Base</h2><div class="grid">${base.map(entryHTML).join("")}</div>`;
-  if (prime.length) h += `<h2 class="sec">Prime</h2><div class="grid">${prime.map(entryHTML).join("")}</div>`;
-  $("#favList").innerHTML = h || `<p class="empty">No favorites yet. Tap the ☆ on any item on the Main page.</p>`;
-  $("#favList").querySelectorAll(".card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item]));
-  const sk = S().favSort || "az";
-  $("#favSortName").textContent = (FAV_SORTS.find(x => x[0] === sk) || FAV_SORTS[0])[1];
-  document.querySelectorAll("[data-fsort]").forEach(b => b.setAttribute("aria-pressed", b.dataset.fsort === sk));
-  $("#tradeDD").open = !!S().tradeOpen;
-  favSummary(); renderTrade();
-}
-function favSummary() {
-  const items = ALL.filter(it => (state.stars[it.id] || (it.grp && state.stars[it.grp])) && counts(it));
-  let tot = 0, got = 0, ready = 0;
-  items.filter(active).forEach(it => { const { n, g } = progress(it); tot += n; got += g; if (readyToBuild(it)) ready++; });
-  $("#favSum").textContent = `${got} / ${tot}`;
-  $("#favBar").style.width = (tot ? 100 * got / tot : 0) + "%";
-  $("#favSub").textContent = `${favEntries(ALL).length} starred · ${ready} ready to build`;
-}
 /* ---------- TRADE MESSAGE BUILDER ---------- */
 const tb = { mode: "WTB", list: [] }; // list of [name, count]
 const tradeNames = () => DATA.trade || [];
@@ -860,149 +785,520 @@ function tradeMessages() {
   return msgs;
 }
 function renderTrade() {
+  if (!$("#trade")) return;
   const msgs = tradeMessages();
   if ($("#tradeCnt")) $("#tradeCnt").textContent = msgs.length;
   $("#trade").innerHTML = msgs.length ? msgListHTML(msgs)
     : `<p class="empty">${starred().length ? "Nothing missing on your starred Primes." : "Star some Primes and their missing parts show up here."}</p>`;
 }
 
-/* ---------- PAGE: RELIC RUNS ---------- */
+/* ---------- PAGE: RELICS ---------- */
 let runsTier = "all";
-function buildRuns() {
-  $("#runs").innerHTML = `<header><h1>Relic Runs</h1><p>Check this during a relic mission. Tick a part anywhere and it drops off this page. Pull down to refresh.</p></header>
-    <div id="runsBody"></div>
-    <footer>Drop chance per refinement: Common 25.33% Intact → 16.67% Radiant · Uncommon 11% → 20% · Rare 2% → 10%. Vaulted relics can be traded with other players, or bought from Varzia when they're in Prime Resurgence.</footer>`;
-}
-/* Relic Runs sections are dropdowns: closed the first time, then as you left them */
-function runsSec(key, title, note, body) {
-  return `<details class="rot card rsec" data-runs="${key}"${S().runsOpen[key] ? " open" : ""}><summary><span class="rname">${title}</span>${note ? `<em class="rnote">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
-}
+const CHEV = `<svg class="chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5 7 7-7 7"/></svg>`;
+const TIER_CLS = { Lith: "tC", Meso: "tU", Neo: "tR", Axi: "tR", Requiem: "tQ", Omnia: "tQ" };
 function needMap(items) { // relic -> [{item, full, rar, n}]
   const rm = {};
   items.forEach(it => missing(it).forEach(p => p.r.forEach(([r, rar]) => (rm[r] = rm[r] || []).push({ it: it.n, full: p.full, rar, n: p.n }))));
   return rm;
 }
-function renderRuns() {
-  const tierOk = r => runsTier === "all" || tierOf(r) === runsTier;
+/* Live fissures in the chosen mode, each with how many farmable relics of its tier hold a part
+   you need (for starred items when there are any, else every unmastered Prime) */
+function fissList(mode) {
   const starItems = starred().filter(active);
-  const srm = needMap(starItems);
-  const hvAll = Object.entries(srm).filter(([, l]) => new Set(l.map(x => x.it)).size > 1);
-  const hvSet = new Set(hvAll.map(([r]) => r));
-  const haveCounts = Object.keys(state.relicCounts).length > 0, own = state.hvOwned;
-  const hvShown = own ? hvAll.filter(([r]) => state.relicCounts[r] > 0) : hvAll;
-  const hv = hvShown.filter(([r]) => tierOk(r)).sort((a, b) =>
-    new Set(b[1].map(x => x.it)).size - new Set(a[1].map(x => x.it)).size || obtainable(b[0]) - obtainable(a[0]) || relicSort(a[0], b[0]));
-  let h = "", body = "";
-  body = `<p class="secsub">Relics that hold parts for two or more different starred items.</p>
-    <div class="controls"><button class="chip ghost" id="hvOwned" aria-pressed="${own}">Owned only</button></div>`;
-  body += hv.length ? `<div class="grid hv">` + hv.map(([r, l]) => {
-    const n = new Set(l.map(x => x.it)).size;
-    return `<article class="card"><div class="chead" style="cursor:default"><div class="name"><button class="relbtn" data-relic="${esc(r)}">${esc(r)}</button>${ownRel(r)}</div>
-      <div class="meta"><span class="tag">${n} starred items</span><span class="st ${stCls(r)}">${statusLabel(r)}</span></div></div>
-      <div class="rlist">${l.sort((a, b) => RAR_ORDER[a.rar] - RAR_ORDER[b.rar]).map(p => `<div class="rrow"><span class="pn">${esc(p.full)}</span><span class="rar ${p.rar}">${RAR[p.rar]}</span></div>`).join("")}</div></article>`;
-  }).join("") + `</div>` : `<p class="empty">${starItems.length < 2 ? "Star at least two items to find relics that cover more than one."
-    : own && !haveCounts ? "Run an Inventory Scan in Settings to see which relics you own."
-    : own && hvAll.length ? "None of the relics you own hold parts for more than one of your starred items."
-    : "No relic holds parts for more than one of your starred items."}</p>`;
-  h += runsSec("hv", "High value", `${hvShown.length}${own ? " owned" : ""}`, body);
-
-  // Fissures
-  const needItems = starItems.length ? starItems : ITEMS.filter(active);
-  const nrm = needMap(needItems);
-  const needTiers = {};
+  const nrm = needMap(starItems.length ? starItems : ITEMS.filter(active)), needTiers = {};
   Object.keys(nrm).forEach(r => { if (obtainable(r)) needTiers[tierOf(r)] = (needTiers[tierOf(r)] || 0) + 1; });
-  const sp = S().fissMode === "sp";
-  document.querySelectorAll("#fissMode [data-fmode]").forEach(b => b.setAttribute("aria-pressed", (b.dataset.fmode === "sp") === sp));
-  body = `<div class="controls fisstoggle" id="fissMode"><button class="chip" data-fmode="normal" aria-pressed="${!sp}">Normal</button><button class="chip" data-fmode="sp" aria-pressed="${sp}">Steel Path</button></div>
-    <p class="secsub">Running now. Gold rows match a tier you have farmable relics to crack${starItems.length ? " for your starred items" : ""}.</p>`;
-  const now = Date.now();
-  const fiss = (LIVE && LIVE.fissures || []).filter(f => f.expiry > now && !!f.hard === sp)
-    .sort((a, b) => (a.storm - b.storm) || (a.hard - b.hard) || (TIER_ORDER[a.tier] ?? 9) - (TIER_ORDER[b.tier] ?? 9) || a.expiry - b.expiry);
-  let fm = 0;
-  if (!LIVE) body += `<p class="empty">Live fissures will show once the app can reach the worldstate.</p>`;
-  else if (!fiss.length) body += `<p class="empty">No ${sp ? "Steel Path " : ""}fissures in the feed right now.</p>`;
-  else body += `<div class="fiss">${fiss.map(f => {
-    const match = f.tier === "Omnia" ? Object.keys(needTiers).length > 0 : !!needTiers[f.tier];
-    const cnt = f.tier === "Omnia" ? Object.values(needTiers).reduce((a, b) => a + b, 0) : needTiers[f.tier] || 0;
-    if (match) fm++;
-    const flags = (f.hard ? `<span class="flag sp">Steel Path</span>` : "") + (f.storm ? `<span class="flag">Void Storm</span>` : "") + (match ? `<button class="flag need" data-ftier="${esc(f.tier)}">${cnt} relic${cnt === 1 ? "" : "s"} ›</button>` : "");
-    return `<div class="frow${match ? " match" : ""}"><span class="ti">${esc(f.tier)}</span><span class="mi"><span class="mt">${esc(f.type)}</span><small>${esc(f.node)}</small></span><span class="tl">${until(f.expiry)}</span>${flags ? `<span class="flags">${flags}</span>` : ""}</div>`;
-  }).join("")}</div>`;
-  h += runsSec("fiss", `Void Fissures${sp ? " · Steel Path" : ""}`, LIVE ? `${fiss.length} open${fm ? ` · ${fm} relevant` : ""}` : "", body);
-
-  // Everything missing
-  body = `<p class="secsub">All relics for every part you still need, across every Prime you haven't mastered. Gold outline = also in High value. Teal outline = you can get it right now.</p>
-    <section class="summary" style="margin-top:0"><div class="sumrow"><span>Relics holding a part you need</span><b id="runSum">0</b></div><div class="sumsub" id="runSub"></div>
+  const sp = (mode || S().fissMode) === "sp", now = Date.now();
+  const all = Object.values(needTiers).reduce((a, b) => a + b, 0);
+  const list = (LIVE && LIVE.fissures || []).filter(f => f.expiry > now && (mode === "any" || !!f.hard === sp))
+    .sort((a, b) => (a.storm - b.storm) || (a.hard - b.hard) || (TIER_ORDER[a.tier] ?? 9) - (TIER_ORDER[b.tier] ?? 9) || a.expiry - b.expiry)
+    .map(f => ({ ...f, cnt: f.tier === "Omnia" ? all : needTiers[f.tier] || 0 }));
+  return { list, sp, starItems };
+}
+const tierChip = t => `<span class="ti ${TIER_CLS[t] || ""}">${esc(t)}</span>`;
+function fissRowHTML(f, pick) {
+  const btn = pick ? `<button class="chip ghost" data-fpick="${esc(f.tier)}|${esc(f.type)}|${esc(f.node)}|${f.expiry}|${f.hard ? 1 : 0}">Pick</button>`
+    : f.cnt ? `<button class="flag need" data-ftier="${esc(f.tier)}">${f.cnt} relic${f.cnt === 1 ? "" : "s"} ›</button>` : "";
+  return `<div class="frow${f.cnt ? " match" : ""}">${tierChip(f.tier)}<span class="mi"><span class="mt">${esc(f.type)}${f.storm ? ` <span class="flag">Void Storm</span>` : ""}${pick && f.hard ? ` <span class="flag sp">Steel Path</span>` : ""}</span><small>${esc(f.node)}</small></span><span class="tl">${shortUntil(f.expiry)}</span>${btn}</div>`;
+}
+function hvList() {
+  const starItems = starred().filter(active), srm = needMap(starItems);
+  const hvAll = Object.entries(srm).filter(([, l]) => new Set(l.map(x => x.it)).size > 1);
+  const shown = state.hvOwned ? hvAll.filter(([r]) => state.relicCounts[r] > 0) : hvAll;
+  return { starItems, hvAll, hv: shown.sort((a, b) => new Set(b[1].map(x => x.it)).size - new Set(a[1].map(x => x.it)).size || obtainable(b[0]) - obtainable(a[0]) || relicSort(a[0], b[0])) };
+}
+function renderRuns() {
+  const el = $("#runs"); if (!el) return;
+  const { list, sp, starItems } = fissList();
+  const owned = Object.values(state.relicCounts || {}).reduce((a, n) => a + (n > 0 ? n : 0), 0);
+  const rel = list.filter(f => f.cnt).length;
+  const { hvAll, hv } = hvList(), own = state.hvOwned, haveCounts = Object.keys(state.relicCounts).length > 0;
+  let h = `<header class="phead"><div class="ptitle"><h1>Relics</h1><span class="pcount">${owned ? `${owned.toLocaleString()} owned` : ""}</span></div><div class="updated"></div>
+    <p>Check this during relic missions. Tick a part anywhere and it drops off this page. Pull down to refresh.</p></header>
+    <div class="seg2" id="fissMode" role="group" aria-label="Fissure type"><button data-fmode="normal" aria-pressed="${!sp}">Normal</button><button data-fmode="sp" aria-pressed="${sp}">Steel Path</button></div>`;
+  h += `<section class="pcard"><div class="pchead"><span class="lbl">Active Fissures</span><span class="pnote">${LIVE ? `${list.length} open${rel ? ` · ${rel} relevant` : ""}` : ""}</span></div>`
+    + (!LIVE ? `<p class="empty">Live fissures show once the app can reach the worldstate.</p>`
+      : !list.length ? `<p class="empty">No ${sp ? "Steel Path " : ""}fissures in the feed right now.</p>`
+      : `<div class="fiss">${list.map(f => fissRowHTML(f)).join("")}</div>`) + `</section>`;
+  h += `<section class="pcard hvcard"><div class="pchead"><span class="lbl">High value</span><label class="mini-tgl">Owned only<input type="checkbox" id="hvOwned"${own ? " checked" : ""}></label></div>
+    <p class="secsub">Relics that hold parts for two or more different starred items.</p>`
+    + (hv.length ? hv.map(([r, l]) => {
+      const n = state.relicCounts[r] || 0, k = new Set(l.map(x => x.it)).size;
+      return `<div class="hvrow"><div class="hvt"><button class="relbtn" data-relic="${esc(r)}">${esc(r)}</button>${n ? `<span class="owned">${n} owned</span>` : ""}<span class="st ${stCls(r)}">${statusLabel(r)}</span><span class="hvn">${k} starred items</span></div>
+        <div class="hvp">${l.sort((a, b) => RAR_ORDER[a.rar] - RAR_ORDER[b.rar] || a.full.localeCompare(b.full)).map(p => esc(p.full) + (p.rar === "R" ? " (Rare)" : "")).join(" · ")}</div></div>`;
+    }).join("") : `<p class="empty">${starItems.length < 2 ? "Star at least two items to find relics that cover more than one."
+      : own && !haveCounts ? "Import your relics under Profile › Import data to see which ones you own."
+      : own && hvAll.length ? "None of the relics you own hold parts for more than one of your starred items."
+      : "No relic holds parts for more than one of your starred items."}</p>`) + `</section>`;
+  const allRm = needMap(ITEMS.filter(active));
+  h += `<button class="pcard linkrow" data-sub="missing"><span><b>Every missing part</b><small>${Object.keys(allRm).length} relics hold a part you need, and the best one for each</small></span>${CHEV}</button>`;
+  h += `<footer>Drop chance per refinement: Common 25.33% Intact → 16.67% Radiant · Uncommon 11% → 20% · Rare 2% → 10%. Vaulted relics can be traded with other players, or bought from Varzia when they're in Prime Resurgence.</footer>`;
+  el.innerHTML = h; renderUpdated();
+}
+/* Every missing part: its own page, opened from Relics */
+function missingHTML() {
+  const tierOk = r => runsTier === "all" || tierOf(r) === runsTier;
+  const hvSet = new Set(hvList().hvAll.map(([r]) => r));
+  const allRm = needMap(ITEMS.filter(active));
+  let h = `<p class="secsub">All relics for every part you still need, across every Prime you haven't mastered. Gold outline = also in High value. Teal outline = you can get it right now.</p>
+    <section class="summary" style="margin-top:0"><div class="sumrow"><span>Relics holding a part you need</span><b>${Object.keys(allRm).length}</b></div>
+      <div class="sumsub">${new Set(Object.values(allRm).flat().map(x => x.full)).size} different parts missing across ${ITEMS.filter(active).length} items · ${hvSet.size} high-value relic${hvSet.size === 1 ? "" : "s"}</div>
       <div class="controls">${[["all", "All tiers"], ["Lith", "Lith"], ["Meso", "Meso"], ["Neo", "Neo"], ["Axi", "Axi"]].map(([k, l]) =>
         `<button class="chip" data-tier="${k}" aria-pressed="${k === runsTier}">${l}</button>`).join("")}</div></section>`;
-  const allRm = needMap(ITEMS.filter(active));
   const cards = [];
   ITEMS.filter(active).forEach(it => {
     const ms = missing(it).filter(p => p.r.some(([r]) => tierOk(r)));
     if (!ms.length) return;
-    let c = `<article class="card"><div class="chead" style="cursor:default"><div class="name">${esc(it.n)}</div><div class="meta"><span class="tag">${esc(it.slot || CAT_LABEL[it.cat])}</span><span>${ms.length} part${ms.length > 1 ? "s" : ""} missing</span></div></div>`;
+    let c = `<article class="card"><div class="chead" style="cursor:default"><div class="name"><button class="linkname" data-open="${it.id}">${esc(it.n)}</button></div><div class="meta"><span class="tag">${esc(it.slot || CAT_LABEL[it.cat])}</span><span>${ms.length} part${ms.length > 1 ? "s" : ""} missing</span></div></div>`;
     ms.forEach(p => {
       const rs = p.r.filter(([r]) => tierOk(r)).sort((a, b) => RAR_ORDER[b[1]] - RAR_ORDER[a[1]] || relicSort(a[0], b[0]));
       c += `<div class="part"><b>${esc(p.full)}</b>${p.n > 1 ? `<span class="need">need ${p.n}</span>` : ""}<div class="chips">` +
         rs.map(([r, rar]) => `<button class="rchip ${rar}${hvSet.has(r) ? " hot" : ""}${obtainable(r) ? " av" : ""}" data-relic="${esc(r)}">${esc(r)}<i>${rar}</i>${ownRel(r)}</button>`).join("") + `</div></div>`;
     });
-    cards.push((state.stars[it.id] ? "0" : "1") + it.n + "\u0000" + c + `</article>`);
+    cards.push([(state.stars[it.id] ? "0" : "1") + it.n, c + `</article>`]);
   });
-  cards.sort();
-  body += cards.length ? `<div class="grid">${cards.map(s => s.split("\u0000")[1]).join("")}</div>` : `<p class="empty">Nothing missing in this tier.</p>`;
-  h += runsSec("miss", "Every missing part", `${Object.keys(allRm).length} relics`, body);
-  $("#runsBody").innerHTML = h;
-  $("#runSum").textContent = Object.keys(allRm).length;
-  $("#runSub").textContent = `${new Set(Object.values(allRm).flat().map(x => x.full)).size} different parts missing across ${ITEMS.filter(active).length} items · ${hvSet.size} high-value relic${hvSet.size === 1 ? "" : "s"}`;
-  $("#hvOwned").addEventListener("click", () => { state.hvOwned = !state.hvOwned; save(); renderRuns(); });
+  cards.sort((a, b) => a[0].localeCompare(b[0]));
+  return h + (cards.length ? `<div class="grid">${cards.map(x => x[1]).join("")}</div>` : `<p class="empty">Nothing missing in this tier.</p>`);
 }
 
-/* ---------- PAGE: ROTATING ---------- */
-function rotSection(key, title, note, body) { // closed the first time, then as you left it
+/* ---------- PAGE: VENDORS ---------- */
+/* The Steel Path Circuit's Incarnon Genesis weeks (wiki, 2026): nine groups of five that repeat */
+const CIRCUIT_WEEKS = [
+  ["Braton", "Lato", "Skana", "Paris", "Kunai"], ["Boar", "Gammacor", "Angstrum", "Gorgon", "Anku"],
+  ["Bo", "Latron", "Furis", "Furax", "Strun"], ["Lex", "Magistar", "Boltor", "Bronco", "Ceramic Dagger"],
+  ["Torid", "Dual Toxocyst", "Dual Ichor", "Miter", "Atomos"], ["Ack & Brunt", "Soma", "Vasto", "Nami Solo", "Burston"],
+  ["Zylok", "Sibear", "Dread", "Despair", "Hate"], ["Dera", "Sybaris", "Cestra", "Sicarus", "Okina"],
+  ["Vectis", "Stug", "Ballistica", "Destreza", "Obex"],
+];
+function circuitWeek(choices) {
+  const norm = s => String(s).toLowerCase().replace(/ incarnon genesis$/, "").trim();
+  const have = new Set((choices || []).map(norm));
+  if (have.size) {
+    let best = -1, hit = 0;
+    CIRCUIT_WEEKS.forEach((w, i) => { const n = w.filter(x => have.has(x.toLowerCase())).length; if (n > hit) { hit = n; best = i; } });
+    if (hit >= 2) return best + 1;
+  }
+  // without the feed: count weeks from one we know (the week of Monday 19 October 2026 was week 8)
+  const wk = Math.floor((Date.now() - Date.UTC(2026, 9, 19)) / (7 * 864e5));
+  return (((7 + wk) % 9) + 9) % 9 + 1;
+}
+function rotSection(key, title, sub, note, body) { // closed the first time, then as you left it
   if (S().hideVend[key]) return "";
-  return `<details class="rot card" data-rot="${key}"${S().rotOpen[key] ? " open" : ""}><summary><span class="rname">${title}</span>${note ? `<em class="rnote">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
+  return `<details class="vrow" data-rot="${key}"${S().rotOpen[key] ? " open" : ""}><summary><span class="vn"><b>${title}</b>${sub ? `<small>${sub}</small>` : ""}</span>${note ? `<em class="vt">${note}</em>` : ""}</summary><div class="rbody">${body}</div></details>`;
 }
 function nextWeeklyReset(now = new Date()) {
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   d.setUTCDate(d.getUTCDate() + ((8 - d.getUTCDay()) % 7 || 7));
   return d.getTime();
 }
+const whenText = ms => { try { return new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }); } catch (e) { return ""; } };
 function renderRotating() {
+  const el = $("#rotating"); if (!el) return;
   const now = Date.now(), L = LIVE;
-  let h = `<header><h1>Rotating</h1><p>Vendors and rewards that change. Tap one to open it. Pull down to refresh.</p></header>`;
-  if (!L) { $("#rotating").innerHTML = h + `<p class="empty">Live vendor info shows here once the app can reach the worldstate.</p>`; return; }
+  let h = `<header class="phead"><div class="ptitle"><h1>Vendors</h1></div><div class="updated"></div><p>Vendors and rewards that change. Tap one to open it. Pull down to refresh.</p></header>`;
+  if (!L) { el.innerHTML = h + `<p class="empty">Live vendor info shows here once the app can reach the worldstate.</p>`; renderUpdated(); return; }
   const needRel = new Set(Object.keys(needMap(starred().filter(active))));
   const row = (n, pr) => `<div class="rrow"><span class="pn">${esc(n)}${needRel.has((RELIC_RE.exec(n) || []).slice(1).join(" ")) ? ` <span class="flag need">starred</span>` : ""}</span>${pr ? `<span class="pr">${pr}</span>` : ""}</div>`;
   const msg = t => `<div class="rlist"><span class="secsub" style="margin:0">${t}</span></div>`;
-  let out = "";
   const b = L.baro;
-  if (b) {
-    const here = baroHere(b, now);
-    const note = here ? `leaves in ${until(b.expiry)}` : b.activation > now ? `arrives in ${until(b.activation)}` : "";
+  if (b && !S().hideVend.baro) {
+    const here = baroHere(b, now), soon = !here && b.activation > now;
     const inv = here && b.inventory && b.inventory.length
-      ? `<div class="rlist">${b.inventory.map(x => row(x.n, [x.ducats ? `${x.ducats} ducats` : "", x.credits ? `${Number(x.credits).toLocaleString()} cr` : ""].filter(Boolean).join(" · "))).join("")}</div>`
-      : msg(here ? "No inventory in the feed yet." : "His inventory shows up when he arrives.");
-    out += rotSection("baro", "Void Trader", note, `<div class="vline">Baro Ki'Teer · ${here ? "at" : "next at"} <b>${esc(b.location || "a relay")}</b></div>${inv}${ducatHTML()}`);
+      ? `<details class="vinv"${S().rotOpen.baroInv ? " open" : ""} data-rot="baroInv"><summary>His stock · ${b.inventory.length} item${b.inventory.length === 1 ? "" : "s"}</summary><div class="rlist">${b.inventory.map(x => row(x.n, [x.ducats ? `${x.ducats} ducats` : "", x.credits ? `${Number(x.credits).toLocaleString()} cr` : ""].filter(Boolean).join(" · "))).join("")}</div></details>`
+      : here ? msg("No inventory in the feed yet.") : "";
+    h += `<section class="pcard baro"><div class="pchead"><span class="lbl">Void Trader</span><em class="pnote">${here ? "leaves in" : soon ? "arrives in" : ""}</em></div>
+      <div class="bbig"><span class="bcount">${here ? shortUntil(b.expiry) : soon ? shortUntil(b.activation) : "—"}</span><span class="when">${esc(here ? `until ${whenText(b.expiry)}` : soon ? whenText(b.activation) : "")}</span></div>
+      <div class="vline">Baro Ki'Teer · ${here ? "at" : "next at"} <b>${esc(b.location || "a relay")}</b></div>${inv}${ducatHTML()}</section>`;
   }
+  let rows = "";
   const deals = (L.darvo || []).filter(d => !d.expiry || d.expiry > now);
-  out += rotSection("darvo", "Darvo", deals[0] && deals[0].expiry ? `ends in ${until(deals[0].expiry)}` : "", deals.length ? deals.map(d => {
+  rows += rotSection("darvo", "Darvo's Deal", "", deals[0] && deals[0].expiry ? shortUntil(deals[0].expiry) : "", deals.length ? deals.map(d => {
     const off = d.orig ? Math.round(100 - 100 * d.sale / d.orig) : 0;
     return `<div class="vline"><div class="big">${esc(d.n)}</div></div><div class="rlist"><div class="rrow"><span class="pn">${d.sale} platinum${d.orig ? ` <span class="sub" style="margin:0">(was ${d.orig}, ${off}% off)</span>` : ""}</span></div>${d.total ? `<div class="rrow"><span class="pn">${Math.max(0, d.total - (d.sold || 0))} of ${d.total} left</span></div>` : ""}</div>`;
   }).join("") : msg("No daily deal in the feed right now."));
   const t = L.teshin;
-  out += rotSection("teshin", "Teshin (Steel Path Honors)", t && t.expiry ? `changes in ${until(t.expiry)}` : "", t
+  rows += rotSection("teshin", "Teshin", "Steel Path Honors", t && t.expiry ? shortUntil(t.expiry) : "", t
     ? `<div class="vline"><div class="big">${esc(t.n || "Unknown")}</div></div><div class="rlist">${t.cost ? `<div class="rrow"><span class="pn">${t.cost} Steel Essence</span></div>` : ""}<span class="secsub" style="margin:0">The weekly rotating item in his Steel Path Honors shop.</span></div>`
     : msg("His weekly item isn't in the feed right now."));
   const c = L.circuit;
-  out += rotSection("circuit", "Steel Path Circuit", `resets in ${until(nextWeeklyReset())}`, c && c.length
+  rows += rotSection("circuit", "Steel Path Circuit", `Incarnon Genesis · Week ${circuitWeek(c)}`, shortUntil(nextWeeklyReset()), c && c.length
     ? `<div class="rlist">${c.map(n => { const pr = BYNAME[n + " Prime"]; return `<div class="rrow"><span class="pn">${esc(n)} Incarnon Genesis${pr && state.stars[pr.id] ? ` <span class="flag need">starred Prime</span>` : ""}</span></div>`; }).join("")}<span class="secsub" style="margin:4px 0 0">This week's Incarnon Genesis choices from the Steel Path Circuit in Duviri.</span></div>`
     : msg("This week's choices aren't in the feed right now."));
   const v = L.varzia;
-  out += rotSection("varzia", "Varzia", v && v.expiry ? `rotates in ${until(v.expiry)}` : "", v && v.inventory && v.inventory.length ? (() => {
+  rows += rotSection("varzia", "Varzia", "Prime Resurgence", v && v.expiry ? shortUntil(v.expiry) : "", v && v.inventory && v.inventory.length ? (() => {
     const rel = v.inventory.filter(x => RELIC_RE.test(x.n)), other = v.inventory.filter(x => !RELIC_RE.test(x.n));
-    return `<div class="vline">Prime Resurgence</div><div class="rlist">${other.map(x => row(x.n)).join("")}${rel.length ? `<div class="group" style="padding:6px 0 0">Relics</div>` + rel.map(x => row(x.n)).join("") : ""}</div>`;
+    return `<div class="rlist">${other.map(x => row(x.n)).join("")}${rel.length ? `<div class="group" style="padding:6px 0 0">Relics</div>` + rel.map(x => row(x.n)).join("") : ""}</div>`;
   })() : msg("Her stock isn't in the live feed right now."));
-  $("#rotating").innerHTML = h + `<div class="rots">${out}</div><footer>Live info from the worldstate (PC and crossplay, which includes Xbox). Gold "starred" tags mark relics with parts for your starred items.</footer>`;
+  if (rows) h += `<section class="pcard vlist">${rows}</section>`;
+  el.innerHTML = h + `<footer>Live info from the worldstate (PC and crossplay, which includes Xbox). Gold "starred" tags mark relics with parts for your starred items.</footer>`;
+  renderUpdated();
+}
+
+/* ---------- MASTERY NUMBERS (Profile, Home, the Mastery page) ---------- */
+function mrStats() {
+  let items = 0, n = 0;
+  ALL.forEach(it => { if (state.mastered[it.id]) { items += masteryXP(it); n++; } });
+  const ex = extraXP(), adj = mrAdj(), xp = Math.max(0, items + Object.values(ex).reduce((a, b) => a + b, 0) + adj);
+  let r = 0; while (mrNeed(r + 1) <= xp) r++;
+  const lo = mrNeed(r), hi = mrNeed(r + 1);
+  return { items, n, ex, adj, xp, r, lo, hi, pct: Math.min(100, 100 * (xp - lo) / (hi - lo)) };
+}
+
+/* ---------- PAGE: HOME ---------- */
+const GEAR_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>`;
+const FOCUS_SVG = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>`;
+function checklistStats(sec) {
+  const base = CHECKLIST[sec].flatMap(([, list]) => list), mine = state.weekly.c.filter(x => x.sec === sec && x.text);
+  return { all: base.length + mine.length, done: base.filter(([id]) => wTicked(sec, id)).length + mine.filter(x => wTicked(sec, x.id)).length };
+}
+const miniBar = (got, tot, cls) => `<span class="bar${cls ? " " + cls : ""}"><i style="width:${tot ? Math.max(2, 100 * got / tot) : 0}%"></i></span>`;
+function renderHome(force) {
+  const el = $("#home"); if (!el) return;
+  // don't wipe a relic name half typed into Focus mode when the live feed refreshes
+  const ae = document.activeElement;
+  if (!force && state.focus && ae && el.contains(ae) && ae.matches("input[type=text]")) return;
+  document.body.classList.toggle("focusing", !!state.focus);
+  if (state.focus) { el.innerHTML = focusHTML(); return; }
+  let h = `<header class="phead"><div class="ptitle"><h1 class="brand">Relic Companion</h1><button class="iconbtn plain" data-act="settings" aria-label="Settings">${GEAR_SVG}</button></div><div class="updated"></div></header>`;
+  // Right now: live fissures your relics fit
+  const { list } = fissList("any"), rel = list.filter(f => f.cnt);
+  h += `<section class="pcard hot"><div class="pchead"><span class="lbl gold">Right now</span><button class="focusbtn" data-fx="start">${FOCUS_SVG}Focus mode</button></div>`
+    + (!LIVE ? `<p class="empty">Live fissures show once the app can reach the worldstate.</p>`
+      : !rel.length ? `<p class="secsub" style="margin:0">No fissures fit your relics right now. Everything that's running is on the Relics page.</p>`
+      : `<div class="fiss">${rel.slice(0, 3).map(f => fissRowHTML(f)).join("")}</div>${rel.length > 3 ? `<button class="linkbtn more" data-go="${PG.relics}">${rel.length - 3} more on the Relics page</button>` : ""}`) + `</section>`;
+  // Void Trader and checklist side by side
+  const b = LIVE && LIVE.baro, here = b && baroHere(b), soon = b && !here && b.activation > Date.now();
+  const spares = Object.keys(state.partCounts || {}).length ? ducatSpares() : null;
+  const d = checklistStats("daily"), w = checklistStats("weekly");
+  h += `<div class="hgrid">
+    <button class="pcard tile" data-go="${PG.vendors}"><span class="lbl">Void Trader</span><span class="big baro">${here ? shortUntil(b.expiry) : soon ? shortUntil(b.activation) : "—"}</span>
+      <small>${here ? "until he leaves" : soon ? "until he arrives" : "No visit in the feed"}${spares ? ` · ${spares.length} spare part${spares.length === 1 ? "" : "s"} to trade` : ""}</small></button>
+    <button class="pcard tile" data-act="checklist"><span class="lbl">Checklist</span>
+      <span class="trow"><span>Daily</span><span>${d.done} / ${d.all}</span></span>${miniBar(d.done, d.all, "teal")}
+      <span class="trow"><span>Weekly</span><span>${w.done} / ${w.all}</span></span>${miniBar(w.done, w.all, "teal")}</button></div>`;
+  const m = mrStats();
+  h += `<button class="pcard tile wide" data-go="${PG.profile}"><span class="trow"><span class="lbl">Mastery Rank</span><b class="rank">${mrLabel(m.r)}</b></span>${miniBar(m.xp - m.lo, m.hi - m.lo)}<small>${(m.hi - m.xp).toLocaleString()} points to ${mrLabel(m.r + 1)}</small></button>`;
+  // Starred: closest to done first
+  const st = sortStarred(entriesOf(ALL.filter(it => isStarred(it) && (it.grp ? true : active(it)))));
+  h += `<section class="pcard"><div class="pchead"><span class="lbl">Starred</span>${st.length ? `<button class="linkbtn" data-act="starred">See all</button>` : ""}</div>`
+    + (st.length ? `<div class="srows">${st.slice(0, 5).map(e => { const s = entryStat(e); return `<button class="srow" data-open="${esc(e.key)}"><span class="trow"><b>${esc(e.n)}</b><span>${esc(s.txt)}</span></span>${miniBar(s.got, s.tot)}</button>`; }).join("")}</div>`
+      : `<p class="secsub" style="margin:0">Tap the star on anything in Collection to follow it here.</p>`) + `</section>`;
+  el.innerHTML = h; renderUpdated();
+}
+const sortStarred = list => list.filter(e => !entryStat(e).m).sort((a, b) => favMissing(a) - favMissing(b) || a.n.localeCompare(b.n));
+
+/* ---------- PAGE: PROFILE ---------- */
+const ICONS = {
+  inv: `<path d="M4 7h16v13H4z"/><path d="M8 7V4h8v3"/>`, imp: `<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>`,
+  trade: `<path d="M4 5h16v11H8l-4 4z"/>`, foundry: `<path d="M3 20V11l5 3v-3l5 3V5h4l1.5 15z"/><path d="M3 20h18"/><path d="M7 17h2M12 17h2"/>`,
+  set: `<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>`,
+  bk: `<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/>`,
+};
+const liRow = (attr, ic, t, sub) => `<button class="li" ${attr}><svg class="lic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[ic]}</svg><span class="lit">${t}<small>${sub}</small></span>${CHEV}</button>`;
+function foundryCounts() {
+  const ready = ALL.filter(readyToBuild).length, building = Object.keys(state.building).length, built = Object.keys(state.built).length;
+  return { ready, building, built };
+}
+function renderProfile() {
+  const el = $("#profile"); if (!el) return;
+  const m = mrStats(), fc = foundryCounts();
+  const rc = Object.values(state.relicCounts || {}).reduce((a, n) => a + (n > 0 ? n : 0), 0), pc = Object.values(state.partCounts || {}).reduce((a, n) => a + (n > 0 ? n : 0), 0);
+  const fbits = [fc.building && `${fc.building} building`, fc.ready && `${fc.ready} ready to build`, fc.built && `${fc.built} to master`].filter(Boolean);
+  el.innerHTML = `<header class="phead"><div class="ptitle"><h1>Profile</h1></div></header>
+    <button class="pcard hot mrcard" data-sub="mastery"><span class="lbl gold">Mastery Rank</span>
+      <span class="trow"><b class="rank big">${mrLabel(m.r)}</b><span class="mnext">→ ${mrLabel(m.r + 1)}</span></span>${miniBar(m.xp - m.lo, m.hi - m.lo, "thick")}
+      <small>${(m.hi - m.xp).toLocaleString()} points to go</small>
+      <span class="mrsplit"><span>Items (${m.n})</span><b>${m.items.toLocaleString()}</b><span>Star Chart + Steel Path</span><b>${(m.ex.sc + m.ex.sp).toLocaleString()}</b><span>Intrinsics</span><b>${(m.ex.rj + m.ex.dr).toLocaleString()}</b>${m.adj ? `<span>Matched to your game</span><b>${m.adj > 0 ? "+" : "−"}${Math.abs(m.adj).toLocaleString()}</b>` : ""}</span>
+      <span class="tapmore">Edit Star Chart, Intrinsics and Match my game ›</span></button>
+    <div class="pcard list">${liRow(`data-act="inventory"`, "inv", "Inventory", rc || pc ? `${rc.toLocaleString()} relics · ${pc.toLocaleString()} Prime parts` : "Nothing imported yet")}
+      ${liRow(`data-sub="import"`, "imp", "Import data", "Relics, parts or the Codex")}
+      ${liRow(`data-sub="trade"`, "trade", "Trade chat shortcuts", "WTB and WTS messages")}
+      ${liRow(`data-sub="foundry"`, "foundry", "Foundry", fbits.join(" · ") || "Nothing building")}</div>
+    <div class="pcard list">${liRow(`data-act="settings"`, "set", "Settings", "Theme, text size, info switches")}
+      ${liRow(`data-act="backup"`, "bk", "Backup and codes", "Save, restore, enter a code")}</div>`;
+}
+
+/* ---------- SUB-PAGES (open over a page, with a back arrow) ---------- */
+let SUB = null;
+function masteryHTML() {
+  const num = (k, f, max, label) => `<div class="drow xmrow"><label for="xm-${k}-${f}">${label}</label><input id="xm-${k}-${f}" type="number" inputmode="numeric" min="0" max="${max}" value="${xmGet(k, f) || ""}" placeholder="0" data-xm="${k}" data-xf="${f}"><span class="xmmax">/ ${max}</span></div>`;
+  return `<div class="summary mrbox" id="mrBox"></div>
+    <p class="dnote">Items count once you mark them Mastered. Add the rest below; your profile in the game shows how much of each chart you've cleared.</p>
+    ${XM.charts.map(([k, l]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All done</button></div>${k === "sp" ? `<p class="dnote">Got the Steel Path? Then the Star Chart is done: tapping All done there fills it in.</p>` : ""}${num(k, "n", XM.NODES, "Nodes cleared")}${num(k, "j", XM.JUNCTIONS, "Junctions won")}`).join("")}
+    ${XM.intr.map(([k, l, trees]) => `<div class="xmhead"><h4>${l}</h4><button class="chip ghost" data-xmall="${k}">All maxed</button></div>${trees.map(t => num(k, t, 10, t)).join("")}`).join("")}
+    <p class="dnote">Each node pays once the first time you clear it, and again on the Steel Path; each Junction pays 1,000. Every Intrinsic rank pays 1,500, up to rank 10 in each tree. Node points vary a little from node to node, so partial charts are an estimate.</p>
+    <div class="xmhead"><h4>Match my game</h4>${mrAdj() ? `<button class="chip ghost" id="mrClear">Undo</button>` : ""}</div>
+    <p class="dnote">The game also counts things the app can't see, like ranks gained on gear you levelled and then sold. Enter your rank and the points your profile says you need for the next one, then tap Match. The app keeps the difference; if you later fix a tick that caused it, match again.</p>
+    <div class="drow xmrow"><label for="mrRank">Your rank</label><select id="mrRank">${Array.from({ length: 81 }, (_, r) => `<option value="${r}"${r === mrNow() ? " selected" : ""}>${mrLabel(r)}</option>`).join("")}</select></div>
+    <div class="drow xmrow"><label for="mrLeft">Points to next</label><input id="mrLeft" type="text" inputmode="numeric" placeholder="97,862"></div>
+    <button class="chip" id="mrGo">Match</button><p class="codemsg" id="mrMsg"></p>`;
+}
+function importHTML() {
+  return `<h4>Inventory Scan</h4>
+    <p class="dnote">Upload a screen recording to update your relics, parts or mastery. For Mastery, record the Codex sorted by rank.</p>
+    ${[["relics", "Relics"], ["parts", "Parts"], ["mastery", "Mastery"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
+    <div class="controls"><button class="chip ghost" data-act="inventory">View inventory</button></div>
+    <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>`;
+}
+function tradeHTML() {
+  return `<p class="secsub">Ready-made "want to buy" messages for the parts you're missing on starred Primes. Each stays under ${TRADE_LIMIT} characters.</p>
+    <div id="trade"></div>
+    <h3 class="sub3">Write your own</h3>
+    <p class="secsub">Type what you're after, one item at a time. Pick the proper name from the suggestions; the app adds the [brackets] and splits long lists to fit chat.</p>
+    <div class="controls" id="tbMode"><button class="chip" data-tbmode="WTB">WTB</button><button class="chip" data-tbmode="WTS">WTS</button></div>
+    <div class="tbin"><input class="search" id="tbIn" type="text" placeholder="Add an item, e.g. ash prime systems" autocomplete="off" aria-label="Item to add" list="tbList"><datalist id="tbList"></datalist>
+      <button class="chip" id="tbAdd">Add</button></div><span class="toast" data-toast></span>
+    <div class="tbchips" id="tbChips"></div><div id="tbOut"></div>
+    <footer>Tap Copy, then paste into trade chat. Duplicates show as x2.</footer>`;
+}
+function foundryHTML() {
+  const rowOf = (it, extra) => `<div class="crow"><button class="cmain" data-open="${esc(it.grp && GROUPS[it.grp] ? it.grp : it.id)}"><span class="ctl"><b>${esc(it.n)}</b><span class="cc">${extra}</span></span></button></div>`;
+  const ready = ALL.filter(readyToBuild), building = Object.keys(state.building).map(id => BYID[id]).filter(Boolean), built = Object.keys(state.built).map(id => BYID[id]).filter(Boolean);
+  let h = `<p class="secsub">Items with every part ticked, what you've started building, and what's waiting to be levelled. Build timers count down here and on each item.</p>`;
+  h += `<h2 class="sec rtbsec">Ready to build<span class="seccnt">${ready.length}</span></h2>` + (ready.length ? `<div class="rows">${ready.map(it => rowOf(it, "All parts ✓").replace("</button></div>", `</button><button class="chip build" data-build="${it.id}">Building</button></div>`)).join("")}</div>` : `<p class="empty">Nothing ready yet.</p>`);
+  h += `<h2 class="sec">Building<span class="seccnt">${building.length}</span></h2>` + (building.length ? `<div class="rows">${building.map(it => rowOf(it, state.building[it.id].e > Date.now() ? `ready in ${shortUntil(state.building[it.id].e)}` : "ready to claim")).join("")}</div>` : `<p class="empty">Nothing in the Foundry.</p>`);
+  h += `<h2 class="sec">Claimed, not mastered yet<span class="seccnt">${built.length}</span></h2>` + (built.length ? `<div class="rows">${built.map(it => rowOf(it, "Level it to 30, then mark it Mastered").replace("</button></div>", `</button><button class="chip ghost" data-mastered="${it.id}">Mastered</button></div>`)).join("")}</div>` : `<p class="empty">Nothing waiting.</p>`);
+  return h;
+}
+const SUBS = {
+  item: k => {
+    const g = GROUPS[k];
+    if (g) { const e = entriesOf(grpItems(k))[0]; return e ? { title: g.slot || CAT_LABEL[g.cat] || g.n, html: `<div class="grid one">${gcardHTML(e)}</div>` } : null; }
+    const it = BYID[k]; if (!it) return null;
+    expanded.clear(); expanded.add(it.id); // the item page always shows its relics and info
+    return { title: it.slot || CAT_LABEL[it.cat] || "Item", html: `<div class="grid one">${cardHTML(it)}</div>`, after: () => document.querySelectorAll("#subWrap .card[data-item]").forEach(c => groupCounts(c, BYID[c.dataset.item])) };
+  },
+  missing: () => ({ title: "Every missing part", html: missingHTML() }),
+  mastery: () => ({ title: "Mastery Rank", html: masteryHTML(), after: renderMR }),
+  import: () => ({ title: "Import data", html: importHTML() }),
+  trade: () => ({ title: "Trade chat shortcuts", html: tradeHTML(), after: () => { bindTradeBuilder(); renderTrade(); } }),
+  foundry: () => ({ title: "Foundry", html: foundryHTML() }),
+};
+function openSub(kind, arg) {
+  SUB = { kind, arg };
+  if (!renderSub()) return;
+  $("#subBody").scrollTop = 0;
+  document.body.classList.add("sub-open"); $("#sub").setAttribute("aria-hidden", "false");
+  if (window.__upCheck) window.__upCheck();
+}
+function renderSub() {
+  if (!SUB) return false;
+  const r = SUBS[SUB.kind] && SUBS[SUB.kind](SUB.arg);
+  if (!r) { closeSub(); return false; }
+  $("#subTitle").textContent = r.title; $("#subWrap").innerHTML = r.html;
+  if (r.after) r.after();
+  return true;
+}
+function closeSub() {
+  if (!SUB) return;
+  SUB = null; expanded.clear();
+  document.body.classList.remove("sub-open"); $("#sub").setAttribute("aria-hidden", "true");
+  if (window.__upCheck) window.__upCheck();
+}
+const subIs = (...k) => SUB && k.includes(SUB.kind);
+
+/* ---------- FOCUS MODE ----------
+   A relic mission from start to finish: pick the fissure, type the squad's relics, then pick
+   the reward you got. On endless missions every round is logged and nothing is ticked until
+   the run summary is saved, so mistakes are easy to fix. */
+const ENDLESS_RE = /survival|defen[cs]e|excavation|interception|disruption|alchemy|cascade|armageddon|flood|conjunction/i;
+let RELIC_REW = null; // relic -> [{full, rar, d}]
+function relicRewards(r) {
+  if (!RELIC_REW) {
+    RELIC_REW = {};
+    ITEMS.forEach(it => (it.parts || []).forEach(p => (p.r || []).forEach(([rn, rar]) => (RELIC_REW[rn] = RELIC_REW[rn] || []).push({ full: p.full, rar, d: p.d || 0 }))));
+    Object.values(RELIC_REW).forEach(l => { if (l.length < 6 && !l.some(x => x.full === "Forma Blueprint")) l.push({ full: "Forma Blueprint", rar: "C", d: 0 }); });
+  }
+  return RELIC_REW[r] || [];
+}
+const FOCUS_RAR = { C: 0, U: 1, R: 2 }; // the reward list goes Common, Uncommon, Rare
+const partNeeded = full => ALL.some(it => active(it) && unitsOf(it).some(u => u.full === full && !u.whole && !isTicked(u)));
+const DUC = () => { const m = {}; ITEMS.forEach(it => (it.parts || []).forEach(p => { m[p.full] = p.d || 0; })); return m; };
+function focusRewards(relics) {
+  const m = new Map();
+  relics.filter(Boolean).forEach(r => relicRewards(r).forEach(x => {
+    const e = m.get(x.full) || { ...x, from: [] }; if (!e.from.includes(r)) e.from.push(r); m.set(x.full, e);
+  }));
+  return [...m.values()].sort((a, b) => FOCUS_RAR[a.rar] - FOCUS_RAR[b.rar] || a.full.localeCompare(b.full));
+}
+const fsave = () => { save(); renderHome(true); };
+function focusStart() {
+  state.focus = { m: null, slots: ["", "", "", ""], round: 1, log: [], stage: "setup", started: Date.now(), extra: [], pick: null };
+  fsave(); goPage(PG.home, false); $("#pg-home").scrollTop = 0;
+}
+function focusHead(F, title) {
+  return `<header class="phead fhead"><div class="ptitle"><h1 class="ftitle"><span class="livedot" aria-hidden="true"></span>${title || "Focus"}${F.m && F.m.endless && F.stage !== "summary" ? `<span class="fround">· Round ${F.round}</span>` : ""}</h1>
+    ${F.stage === "summary" ? "" : `<button class="chip ghost" data-fx="end">End</button>`}</div></header>`;
+}
+function focusHTML() {
+  const F = state.focus;
+  if (F.stage === "reward") return focusRewardHTML(F);
+  if (F.stage === "summary") return focusSummaryHTML(F);
+  let h = focusHead(F);
+  // the mission
+  if (F.m) {
+    h += `<section class="pcard"><div class="pchead"><span class="lbl">Mission</span><button class="linkbtn" data-fx="mission">Change</button></div>
+      <div class="frow">${tierChip(F.m.tier)}<span class="mi"><span class="mt">${esc(F.m.type || "Relic mission")}</span><small>${esc(F.m.node || "")}</small></span>${F.m.exp > Date.now() ? `<span class="tl">${shortUntil(F.m.exp)}</span>` : ""}</div>
+      <label class="tgl"><span>Endless: pick a reward every round</span><input type="checkbox" id="fxEndless"${F.m.endless ? " checked" : ""}></label></section>`;
+  } else {
+    const { list } = fissList("any");
+    h += `<section class="pcard"><div class="pchead"><span class="lbl">Which mission?</span></div>
+      ${list.length ? `<div class="fiss">${list.map(f => fissRowHTML(f, true)).join("")}</div>` : `<p class="secsub">No fissures in the live feed right now.</p>`}
+      <p class="secsub" style="margin:10px 0 6px">Or just pick the relic tier:</p>
+      <div class="controls">${["Lith", "Meso", "Neo", "Axi", "Requiem", "Omnia"].map(t => `<button class="chip ghost" data-fxtier="${t}">${t}</button>`).join("")}</div></section>`;
+  }
+  // the squad's relics
+  const n = F.slots.filter(Boolean).length;
+  h += `<section class="pcard"><div class="pchead"><span class="lbl">Squad relics</span><span class="pnote">${n} of 4</span></div><div class="slots">`
+    + F.slots.map((r, i) => {
+      const who = i ? String(i + 1) : "You", own = !i && r && state.relicCounts[r] ? `<small>${state.relicCounts[r]} owned</small>` : "";
+      return r ? `<div class="slot"><span class="who${i ? "" : " me"}">${who}</span><b>${esc(r)}</b>${own}<button class="x" data-fxclr="${i}" aria-label="Remove ${esc(r)}">×</button></div>`
+        : `<div class="slot open"><label class="who${i ? "" : " me"}" for="fxs${i}">${who}</label><input id="fxs${i}" data-fxslot="${i}" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="${i ? "Their relic" : "Your relic"}, e.g. ${F.m && F.m.tier && F.m.tier !== "Omnia" && F.m.tier !== "Requiem" ? F.m.tier : "Lith"} A13"></div><div class="sug" id="fxsug${i}"></div>`;
+    }).join("") + `</div></section>
+    <p class="secsub">Type the relic each squadmate equipped. Fewer than four is fine.</p>`;
+  const rw = focusRewards(F.slots), need = rw.filter(x => partNeeded(x.full));
+  if (n) h += `<section class="pcard hot"><div class="trow"><span>Rewards in play<small>${rw.length} possible · ${need.length} you need</small></span>${need.length ? `<b class="gold">${esc(need[0].full)}${need.length > 1 ? ` +${need.length - 1}` : ""}</b>` : ""}</div></section>`;
+  h += `<button class="bigbtn" data-fx="go"${n ? "" : " disabled"}>${F.round > 1 || F.log.length ? "Pick your reward" : "Start"}</button>`;
+  return h;
+}
+function rewardRowsHTML(list, picked, name) {
+  const duc = DUC();
+  return list.map(x => {
+    const need = partNeeded(x.full), spare = !need && duc[x.full];
+    return `<label class="rw${need ? " needrow" : ""}"><input type="radio" name="${name}" value="${esc(x.full)}"${picked === x.full ? " checked" : ""}><span class="n">${esc(x.full)}<small>${esc(x.from.join(" · "))}${spare ? ` · <span class="duc">spare, ${duc[x.full]} ducats</span>` : ""}</small></span>${need ? `<span class="needtag">Need</span>` : ""}<span class="rar ${x.rar}">${x.rar}</span></label>`;
+  }).join("");
+}
+function focusRewardHTML(F) {
+  const list = focusRewards(F.slots), endless = F.m && F.m.endless;
+  let h = focusHead(F);
+  h += `<div class="squad">${F.slots.map((r, i) => r ? `<span class="sq${i ? "" : " me"}">${esc(r.replace(/^(Lith|Meso|Neo|Axi|Requiem) /, ""))}</span>` : "").join("")}<button class="linkbtn" data-fx="edit">Edit squad</button></div>`;
+  h += `<section class="pcard rwcard"><div class="pchead"><span class="lbl hi">Which reward did you get?</span><span class="pnote">${list.length} possible</span></div>${rewardRowsHTML(list, F.pick, "fxrw")}</section>`;
+  h += endless ? `<button class="bigbtn" data-fx="next">Next round</button><p class="secsub center">Saves the reward you chose and clears the relics, ready for the next set.</p>`
+    : `<button class="bigbtn" data-fx="done">Done</button><p class="secsub center">Ticks the part you got and takes your relic off your count.</p>`;
+  if (endless && F.log.length) h += `<section class="pcard"><span class="lbl">This run</span>${F.log.map(l => `<div class="trow"><span class="muted">Round ${l.round}</span><span>${esc(l.pick || "Nothing picked")}</span></div>`).join("")}</section>`;
+  return h;
+}
+function focusSummaryHTML(F) {
+  const mins = Math.max(1, Math.round((Date.now() - F.started) / 60000)), rounds = F.log.length;
+  let h = focusHead(F, "Run summary");
+  h += `<p class="secsub">${F.m ? `${esc(F.m.tier)} ${esc(F.m.type || "")}${F.m.node ? ` · ${esc(F.m.node)}` : ""} · ` : ""}${rounds} round${rounds === 1 ? "" : "s"} · ${mins}m</p>`;
+  const rar = n => { for (const l of F.log) for (const x of focusRewards(l.relics)) if (x.full === n) return x.rar; return ""; };
+  h += `<section class="pcard"><div class="pchead"><span class="lbl hi">What you got</span><span class="pnote">check before saving</span></div>`
+    + F.log.map((l, i) => l.pick
+      ? `<div class="rd"><span class="r">Round ${l.round}</span><span class="n">${esc(l.pick)}</span>${partNeeded(l.pick) ? `<span class="needtag">Need</span>` : ""}${rar(l.pick) ? `<span class="rar ${rar(l.pick)}">${rar(l.pick)}</span>` : ""}<button class="x" data-fxdel="${i}" aria-label="Remove ${esc(l.pick)}">×</button></div>`
+      : `<div class="rd"><span class="r">Round ${l.round}</span><span class="n muted">Nothing picked</span><button class="chip ghost" data-fxre="${i}">Pick</button></div>`).join("")
+    + F.extra.map((n, i) => `<div class="rd"><span class="r">Added</span><span class="n">${esc(n)}</span><button class="x" data-fxdelx="${i}" aria-label="Remove ${esc(n)}">×</button></div>`).join("")
+    + `<div class="addrow"><input id="fxAdd" type="text" list="fxParts" placeholder="Add a part you got" autocomplete="off" aria-label="Add a part you got"><datalist id="fxParts"></datalist><button class="chip" data-fx="add">Add</button></div></section>`;
+  const got = F.log.filter(l => l.pick).length + F.extra.length, opened = F.log.filter(l => l.relics[0]).length;
+  h += `<section class="pcard"><div class="trow"><span>Rewards</span><b>${got}</b></div><div class="trow"><span>Relics you opened</span><b>${opened}</b></div>
+    <p class="secsub" style="margin:6px 0 0">Saving ticks the Prime parts you got and takes the relics you opened off your counts.</p></section>
+    <div class="btnrow"><button class="bigbtn ghost" data-fx="back">Back</button><button class="bigbtn" data-fx="save">Save and finish</button></div>`;
+  return h;
+}
+/* Tick one copy of a part (the first unticked one on an item you haven't mastered), or count it as
+   a spare when every copy is already ticked. Forma and other non-parts are just logged. */
+function applyReward(full) {
+  const cand = []; ALL.forEach(it => unitsOf(it).forEach(u => { if (u.full === full && !u.whole && !isTicked(u)) cand.push([it, u]); }));
+  const hit = cand.find(([it]) => active(it)) || cand[0];
+  if (hit) { state.ticks[hit[1].id] = 1; return true; }
+  if (DUC()[full] != null) { state.partCounts[full] = (state.partCounts[full] || 0) + 1; return true; }
+  return false;
+}
+function useRelic(r) { if (r && state.relicCounts[r] > 0) state.relicCounts[r]--; }
+function focusFinish(entries, extra) {
+  const snap = snapState();
+  let n = 0;
+  entries.forEach(l => { if (l.pick && applyReward(l.pick)) n++; useRelic(l.relics[0]); });
+  extra.forEach(p => { if (applyReward(p)) n++; });
+  state.focus = null; save(); renderAll();
+  offerUndo(n ? `Saved ${n} reward${n === 1 ? "" : "s"} from your run` : "Run finished", snap);
+}
+function focusSuggest(i, q) {
+  const box = $("#fxsug" + i); if (!box) return;
+  const F = state.focus, tier = F.m && !["Omnia"].includes(F.m.tier) ? F.m.tier : null;
+  const norm = s => s.toLowerCase().replace(/\s+/g, " ").trim();
+  q = norm(q);
+  if (!q) { box.innerHTML = ""; return; }
+  const names = Object.keys(DATA.relics || {}).filter(r => (!tier || tierOf(r) === tier) && (norm(r).includes(q) || norm(r.split(" ").slice(1).join(" ")).startsWith(q)));
+  const own = r => !i ? state.relicCounts[r] || 0 : 0;
+  names.sort((a, b) => own(b) - own(a) || relicSort(a, b));
+  box.innerHTML = names.slice(0, 6).map(r => { const rare = relicRewards(r).find(x => x.rar === "R"); return `<button class="sugrow" data-fxpick="${i}|${esc(r)}"><b>${esc(r)}</b><span>${own(r) ? `${own(r)} owned · ` : ""}${rare ? esc(rare.full) : ""}</span></button>`; }).join("")
+    || `<p class="secsub" style="margin:6px 12px">No ${tier ? tier + " " : ""}relic by that name.</p>`;
+}
+function focusClick(t) {
+  const F = state.focus;
+  const fx = t.closest("[data-fx]");
+  if (fx) {
+    const k = fx.dataset.fx;
+    if (k === "start") { focusStart(); return true; }
+    if (!F) return true;
+    if (k === "end") {
+      if (F.m && F.m.endless && (F.log.length || F.pick)) { if (F.pick) { F.log.push({ round: F.round, pick: F.pick, relics: F.slots.slice() }); F.pick = null; } F.stage = "summary"; fsave(); }
+      else { state.focus = null; fsave(); }
+      return true;
+    }
+    if (k === "mission") { F.m = null; fsave(); return true; }
+    if (k === "go") { if (F.slots.some(Boolean)) { F.stage = "reward"; fsave(); $("#pg-home").scrollTop = 0; } return true; }
+    if (k === "edit") { F.stage = "setup"; fsave(); return true; }
+    if (k === "next") {
+      F.log.push({ round: F.round, pick: F.pick, relics: F.slots.slice() });
+      F.round++; F.pick = null; F.slots = ["", "", "", ""]; F.stage = "setup"; fsave(); $("#pg-home").scrollTop = 0;
+      setTimeout(() => { const i = $("#fxs0"); if (i) i.focus(); }, 60);
+      return true;
+    }
+    if (k === "done") { focusFinish([{ round: F.round, pick: F.pick, relics: F.slots.slice() }], []); return true; }
+    if (k === "back") { F.stage = "reward"; if (F.log.length && !F.slots.some(Boolean)) { const l = F.log.pop(); F.slots = l.relics; F.pick = l.pick; F.round = l.round; } fsave(); return true; }
+    if (k === "save") { focusFinish(F.log, F.extra); return true; }
+    if (k === "add") {
+      const v = ($("#fxAdd").value || "").trim(), all = [...new Set([...Object.keys(DUC()), "Forma Blueprint"])];
+      const name = all.find(n => n.toLowerCase() === v.toLowerCase()) || all.find(n => n.toLowerCase().startsWith(v.toLowerCase()) && v.length > 2);
+      if (name) { F.extra.push(name); fsave(); } else if (v) say(fx, "No part by that name");
+      return true;
+    }
+    return true;
+  }
+  if (!F) return false;
+  const fp = t.closest("[data-fpick]");
+  if (fp) { const [tier, type, node, exp, hard] = fp.dataset.fpick.split("|"); F.m = { tier, type, node, exp: +exp, sp: hard === "1", endless: ENDLESS_RE.test(type) }; fsave(); return true; }
+  const ftr = t.closest("[data-fxtier]");
+  if (ftr) { F.m = { tier: ftr.dataset.fxtier, type: "", node: "", exp: 0, endless: false }; fsave(); return true; }
+  const pk = t.closest("[data-fxpick]");
+  if (pk) { const [i, r] = pk.dataset.fxpick.split("|"); F.slots[+i] = r; fsave(); const nx = document.querySelector("[data-fxslot]"); if (nx) nx.focus(); return true; }
+  const cl = t.closest("[data-fxclr]");
+  if (cl) { F.slots[+cl.dataset.fxclr] = ""; fsave(); return true; }
+  const dl = t.closest("[data-fxdel]");
+  if (dl) { F.log[+dl.dataset.fxdel].pick = null; fsave(); return true; }
+  const dx = t.closest("[data-fxdelx]");
+  if (dx) { F.extra.splice(+dx.dataset.fxdelx, 1); fsave(); return true; }
+  const re = t.closest("[data-fxre]");
+  if (re) { focusRepick(+re.dataset.fxre); return true; }
+  return false;
+}
+/* Summary: pick a reward for a round you skipped */
+function focusRepick(i) {
+  const F = state.focus, l = F.log[i];
+  $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">Round ${l.round}</div><div class="meta"><span class="tag">${esc(l.relics.filter(Boolean).join(" · ") || "No relics logged")}</span></div></div>
+    <div class="mbody rwcard">${rewardRowsHTML(focusRewards(l.relics), null, "fxre")}</div><div class="tourbtns"><button class="chip ghost" data-close>Cancel</button><button class="chip" id="fxReOk">Use this</button></div></article></div>`;
+  $("#fxReOk").onclick = () => { const c = document.querySelector('input[name="fxre"]:checked'); if (c) { l.pick = c.value; fsave(); } closeModal(); };
 }
 
 /* ---------- UPDATED LINE ---------- */
@@ -1012,7 +1308,8 @@ function renderUpdated() { // short: "Updated 18 h ago" with a dot that turns am
   if (DATA_SRC === "none") s = "Loading…";
   else if (DATA.seed) s = "Starter data";
   else s = `Updated ${ago(Math.max(DATA_AT, LIVE ? LIVE_AT : 0))}`;
-  $("#updated").innerHTML = `<span class="sdot${off ? " off" : ""}" role="img" aria-label="${off ? "Offline" : "Online"}"></span>${s}${off ? ` <span class="off">offline</span>` : ""}`;
+  const html = `<span class="sdot${off ? " off" : ""}" role="img" aria-label="${off ? "Offline" : "Online"}"></span>${s}${off ? ` <span class="off">offline</span>` : ""}`;
+  document.querySelectorAll(".updated").forEach(el => { el.innerHTML = html; });
 }
 
 /* ---------- DRAWER ---------- */
@@ -1034,37 +1331,28 @@ function renderDrawer() {
       <h4>Info shown</h4>
       ${SHOW_SWITCHES.map(([k, l]) => sw(k, l)).join("")}
       <p class="always">Always shown: current fissures, relic rarity badges and Incarnon info. Variant info always shows inside the Incarnon &amp; variants dropdown. Oracle text is the explanations under page titles and at the bottom of pages.</p>
-      <h4>Rotating vendors</h4>
+      <h4>Vendors</h4>
       ${VENDORS.map(vend).join("")}
       <h4>Best farm source</h4>
       <div class="seg"><button data-farm="rates" aria-pressed="${st.farm === "rates"}">By the Rates</button><button class="mid" data-farm="both" aria-pressed="${st.farm === "both"}" aria-label="Both">Both</button><button data-farm="community" aria-pressed="${st.farm === "community"}">Community-Driven</button></div>
       <p class="seghelp">${{ rates: "The best mission for each relic, worked out from DE's drop tables.", community: "The farm players recommend.", both: "By the Rates on top, Community-Driven below. When they agree it shows once." }[st.farm]}</p>
     </div></details>
-    ${mrSecHTML()}
-    <details class="dsec"><summary>Import Data</summary><div class="dbody">
-      <h4>Inventory Scan</h4>
-      <p class="dnote">Upload a screen recording to update your relics, parts or mastery. For Mastery, record the Codex sorted by rank.</p>
-      ${[["relics", "Relics"], ["parts", "Parts"], ["mastery", "Mastery"]].map(([k, l]) => `<div class="fbrow"><span class="fblabel">${l}</span><label class="filebox${SCAN_UI.busy ? " off" : ""}"><span class="fbtn">Choose file</span><span class="fname">${esc(state.scanFiles[k] || "No file chosen")}</span><input type="file" accept="video/*" data-scan="${k}" hidden${SCAN_UI.busy ? " disabled" : ""}></label></div>`).join("")}
-      <div class="controls"><button class="chip ghost" id="invBtn">View inventory</button></div>
-      <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
-    </div></details>
     ${devSecHTML()}
     <div class="spacer"></div>
-    <h3>Enter code</h3>
+    <h3 id="codeSec">Enter code</h3>
     <div class="codebox"><input id="codeIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code"><button class="chip" id="codeBtn">Unlock</button></div>
     <div class="codemsg" id="codeMsg" role="status"></div>
     ${soundRow()}
     <div class="drow"><label for="startSel">Start page</label><select id="startSel" class="dsel">${START_PAGES.map(([v, l]) => `<option value="${v}"${+st.startPage === v ? " selected" : ""}>${l}</option>`).join("")}</select></div>
-    <div class="backup"><h3>Backup / restore</h3>
+    <div class="backup" id="bkSec"><h3>Backup / restore</h3>
       <div class="controls"><button class="chip" id="bkCopy">Copy backup code</button><button class="chip" id="bkSave">Save backup file</button></div>
       <textarea id="bkIn" placeholder="Paste a backup code here to restore" spellcheck="false"></textarea>
       <div class="controls"><button class="chip ghost" id="bkRestore">Restore</button><label class="chip ghost filechip">Restore from file<input type="file" accept=".txt,text/plain" id="bkFile" hidden></label><span class="toast" data-toast></span></div>
       <div class="controls"><button class="chip danger" id="clearBtn">Clear data</button></div>
       <p class="fanline">${native && native.version ? `Version ${esc(native.version())} · ` : ""}Fan-made app, not affiliated with Digital Extremes. Warframe is a trademark of Digital Extremes Ltd.</p></div>
     <button class="helpbtn" id="tourBtn" aria-label="Show the tour again">?</button>`;
-  renderMR();
 }
-const VENDORS = [["baro", "Void Trader"], ["darvo", "Darvo"], ["teshin", "Teshin (Steel Path Honors)"], ["circuit", "Steel Path Circuit"], ["varzia", "Varzia"]];
+const VENDORS = [["baro", "Void Trader"], ["darvo", "Darvo's Deal"], ["teshin", "Teshin (Steel Path Honors)"], ["circuit", "Steel Path Circuit"], ["varzia", "Varzia"]];
 async function saveBackupFile(btn) {
   const code = await makeBackup(), name = `relic-companion-backup-${new Date().toISOString().slice(0, 10)}.txt`;
   if (native && native.saveFile) {
@@ -1081,7 +1369,7 @@ function scanSay(msg, bad, busy) {
   Object.assign(SCAN_UI, { msg, bad: !!bad, busy: !!busy });
   const m = $("#scanMsg");
   if (m) { m.className = "scanmsg" + (bad ? " bad" : ""); m.innerHTML = esc(msg) + (busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""); }
-  document.querySelectorAll("#drawer .filebox").forEach(f => { f.classList.toggle("off", !!busy); f.querySelector("input").disabled = !!busy; });
+  document.querySelectorAll(".filebox").forEach(f => { f.classList.toggle("off", !!busy); f.querySelector("input").disabled = !!busy; });
 }
 
 /* ---------- INVENTORY (what the last scans found) ---------- */
@@ -1101,7 +1389,7 @@ function showInventory() {
     const at = state.scanAt[invTab], file = state.scanFiles[invTab];
     const total = all.reduce((a, [, n]) => a + n, 0);
     $("#invSum").innerHTML = all.length ? `${all.length} ${isR ? "relic" : "part"}${all.length === 1 ? "" : "s"} · ${total} in total${file ? `<br><span class="sub" style="margin:0">${esc(file)}${at ? `, scanned ${ago(at)}` : ""}</span>` : ""}` : "";
-    if (!all.length) { $("#invList").innerHTML = `<p class="empty">Nothing imported yet. Upload a recording of your ${isR ? "relics" : "parts"} under Import Data in Settings.</p>`; return; }
+    if (!all.length) { $("#invList").innerHTML = `<p class="empty">Nothing imported yet. Upload a recording of your ${isR ? "relics" : "parts"} under Profile › Import data.</p>`; return; }
     if (!rows.length) { $("#invList").innerHTML = `<p class="empty">Nothing matches that search.</p>`; return; }
     let h = "", grp = null;
     rows.forEach(([k, n]) => {
@@ -1183,7 +1471,6 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]').setAttribute("content", bg);
   if (native && native.setBarColor) try { native.setBarColor(bg, LIGHT_THEMES.has(t)); } catch (e) {}
   decorate(sd);
-  fitTabs(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTabs); // the new theme's lettering may be wider
 }
 
 /* ---------- SPECIAL DAYS ----------
@@ -1321,7 +1608,7 @@ function say(el, msg) {
 
 /* ---------- UNDO ----------
    Mastered, Building and scan changes show a small Undo bar for a few seconds. */
-const snapState = () => JSON.stringify({ t: state.ticks, m: state.mastered, b: state.building, bl: state.built });
+const snapState = () => JSON.stringify({ t: state.ticks, m: state.mastered, b: state.building, bl: state.built, rc: state.relicCounts, pc: state.partCounts });
 function offerUndo(msg, snap) {
   let bar = $("#undoBar");
   if (!bar) { bar = document.createElement("div"); bar.id = "undoBar"; bar.className = "undobar"; bar.setAttribute("role", "status"); document.body.appendChild(bar); }
@@ -1331,6 +1618,7 @@ function offerUndo(msg, snap) {
   $("#undoBtn").onclick = () => {
     const o = JSON.parse(snap);
     Object.assign(state, { ticks: o.t, mastered: o.m, building: o.b, built: o.bl });
+    if (o.rc) state.relicCounts = o.rc; if (o.pc) state.partCounts = o.pc;
     save(); renderAll(); bar.classList.remove("show");
   };
 }
@@ -1381,21 +1669,21 @@ const closeModal = () => { $("#modalRoot").innerHTML = ""; const f = modalOnClos
 /* ---------- TOUR + WHAT'S NEW ---------- */
 const TOUR = [
   ["Welcome to Relic Companion", "Track everything that counts toward mastery: the parts you still need, which relics drop them, and where to farm them."],
-  ["Four pages", "Swipe left and right, or tap the tabs: <b>Rotating</b> (vendors and weekly rewards), <b>Relic Runs</b> (what to crack and live fissures), <b>Favorites</b> and <b>Main</b> (everything that gives mastery, in Base and Prime)."],
-  ["Star, tick, tap", "Tap ☆ to add an item to Favorites. Tick parts as you get them. Tap an item's name for its relics, best farms and other info."],
-  ["Two side panels", "Swipe in from the left edge, or tap the menu button, for <b>Settings</b>. Swipe in from the right edge, or tap the checklist button, for your <b>daily and weekly checklist</b>."],
-  ["Keep your progress safe", "Ticks are saved on this phone. Use <b>Save backup file</b> or <b>Copy backup code</b> in Settings to move them to a new phone. To see this tour again, tap the <b>?</b> at the bottom of the Settings menu."],
+  ["The bottom bar", "<b>Home</b> sits in the middle with what matters right now. <b>Collection</b> holds everything that gives mastery, <b>Relics</b> has live fissures and what to crack, <b>Vendors</b> has Baro and the weekly rotations, and <b>Profile</b> has your Mastery Rank, inventory and settings."],
+  ["Star, tick, tap", "Tap the star on anything in Collection to follow it on Home. Tap an item for its own page: tick parts as you get them, and see its relics and best farms."],
+  ["Focus mode", "Starting a relic mission? Tap <b>Focus mode</b> on Home, type the squad's relics, then pick the reward you got. Endless runs log every round and give you a summary to check at the end."],
+  ["Keep your progress safe", "Swipe in from the right edge for your daily and weekly checklist. Ticks are saved on this phone: use <b>Profile › Backup and codes</b> to move them to a new phone. To see this tour again, tap the <b>?</b> at the bottom of Settings."],
 ];
 /* Update WHATS_NEW with each APK release: friends see it once after updating. */
 const WHATS_NEW = {
-  id: "2026-11-c",
+  id: "2026-11-v1.1",
   items: [
-    "Main now covers everything that gives mastery. Base holds the regular versions, with variants like MK1 and Vandal in one card; Prime holds every Prime set. Each shows how many you've mastered.",
-    "New categories: Vehicles, Arch-weapons, Modular weapons, Modular companions, Amps (with Sirocco) and Tauron Strikes.",
-    "The search bar, category picker and a filter button stay pinned as you scroll. A ↑ button takes you back to the top.",
-    "Favorites gets Base and Prime sections, sorting, and Trade chat shortcuts with a message builder.",
-    "Tap any relic name for where to farm it and what's inside. Relic Runs and Rotating sections are dropdowns that remember how you left them.",
-    "Settings are grouped into Appearance, Accessibility and Import Data. Save your backup as a file, hide Rotating vendors you don't use, and undo Mastered or scan changes.",
+    "Version 1.1: a new layout. The bottom bar has Profile, Collection, Home, Relics and Vendors, with Home in the middle.",
+    "Home shows what matters right now: fissures your relics fit, Baro's countdown, your checklist, Mastery Rank and starred items.",
+    "Focus mode: enter the squad's relics and pick the reward you got. Endless missions log every round, with a summary you can fix before saving.",
+    "Collection is one list with All, Base and Prime, a Starred filter and category chips. Tap anything for its own page.",
+    "Profile holds Mastery Rank, Inventory, Import data, Trade chat shortcuts and a Foundry page. Settings is just settings now.",
+    "Relics shows every active fissure at once, and Vendors puts the Void Trader up top with his Ducat list.",
   ],
 };
 function showTour() {
@@ -1428,7 +1716,7 @@ function showWhatsNew() {
   state.newsSeen = WHATS_NEW.id; save();
   $("#modalRoot").innerHTML = `<div class="modal" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">What's new</div></div>
     <div class="mbody"><ul class="news">${WHATS_NEW.items.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
-    <p class="secsub" style="margin:8px 0 0">You can turn this off under Settings › Info shown.</p></div>
+    <p class="secsub" style="margin:8px 0 0">You can turn this off under Settings › Accessibility.</p></div>
     <button class="builtbtn" data-close>Got it</button></article></div>`;
 }
 function maybeNews() {
@@ -1442,7 +1730,7 @@ function showClaims(ids) {
     <button class="builtbtn" data-close>Got it</button></article></div>`;
   modalOnClose = () => {
     ids.forEach(id => { delete state.building[id]; state.built[id] = 1; });
-    save(); renderMain(); renderFavs(); setTimeout(maybeNews, 250);
+    save(); renderAll(); setTimeout(maybeNews, 250);
   };
 }
 function afterIntro() {
@@ -1456,47 +1744,63 @@ function afterIntro() {
 let renderQueued = 0;
 function renderAll() {
   refreshLiveSets();
-  renderMain(); renderFavs(); renderRuns(); renderRotating(); renderUpdated(); renderMR();
+  renderMain(); renderHome(); renderProfile(); renderRuns(); renderRotating(); renderUpdated(); renderMR(); renderTrade();
+  if (subIs("missing", "foundry", "import")) renderSub();
 }
 function queueDerived() { // after a tick: refresh lists that depend on missing parts
   clearTimeout(renderQueued);
-  renderQueued = setTimeout(() => { renderRuns(); renderTrade(); favSummary(); mainSummary(); }, 120);
+  renderQueued = setTimeout(() => { renderMain(); renderRuns(); renderTrade(); renderHome(); renderProfile(); mainSummary(); if (subIs("missing", "foundry")) renderSub(); }, 120);
 }
 
 /* ---------- EVENTS ---------- */
-function bindEvents() {
-  const pages = $("#pages");
-  pages.addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.mgrp")) fillMg(e.target); }, true);
-  pages.addEventListener("change", e => {
-    const dk = e.target.dataset.duc;
+/* Pages and sub-pages share the same handlers: an item page works like any list */
+function bindContent(root) {
+  root.addEventListener("change", e => {
+    const t = e.target;
+    if (t.id === "hvOwned") { state.hvOwned = t.checked; save(); renderRuns(); return; }
+    if (t.id === "fxEndless" && state.focus && state.focus.m) { state.focus.m.endless = t.checked; fsave(); return; }
+    if (t.name === "fxrw" && state.focus) { state.focus.pick = t.value; save(); return; }
+    const dk = t.dataset.duc;
     if (dk != null) {
       state.ducKeep = state.ducKeep || {}; state.ducPick = state.ducPick || {};
-      if (e.target.dataset.near) { if (e.target.checked) state.ducPick[dk] = 1; else delete state.ducPick[dk]; }
-      else if (e.target.checked) delete state.ducKeep[dk]; else state.ducKeep[dk] = 1;
-      save(); const t = $("#ducTot"); if (t) t.innerHTML = ducatTotal(); return;
+      if (t.dataset.near) { if (t.checked) state.ducPick[dk] = 1; else delete state.ducPick[dk]; }
+      else if (t.checked) delete state.ducKeep[dk]; else state.ducKeep[dk] = 1;
+      save(); const tt = $("#ducTot"); if (tt) tt.innerHTML = ducatTotal(); return;
     }
-    const mid = e.target.dataset.m;
+    const mid = t.dataset.m;
     if (mid) { // a modular piece: its tick is Mastered
       const snap = snapState(), it = BYID[mid];
-      if (e.target.checked) { state.mastered[mid] = 1; blinkBuddy(); } else delete state.mastered[mid];
+      if (t.checked) { state.mastered[mid] = 1; blinkBuddy(); } else delete state.mastered[mid];
       save(); refreshCards(mid); queueDerived();
-      offerUndo(`${it ? it.n : "Item"} ${e.target.checked ? "marked mastered" : "unmarked"}`, snap); return;
+      offerUndo(`${it ? it.n : "Item"} ${t.checked ? "marked mastered" : "unmarked"}`, snap); return;
     }
-    const u = e.target.dataset.u; if (!u) return;
-    const id = e.target.dataset.it, it = BYID[id], was = it && readyToBuild(it), hadB = !!(state.building[id] || state.built[id]);
-    if (e.target.checked) { state.ticks[u] = 1; blinkBuddy(); } else { delete state.ticks[u]; clearBuild(id); }
+    const u = t.dataset.u; if (!u) return;
+    const id = t.dataset.it, it = BYID[id], hadB = !!(state.building[id] || state.built[id]);
+    if (t.checked) { state.ticks[u] = 1; blinkBuddy(); } else { delete state.ticks[u]; clearBuild(id); }
     save(); refreshCards(id); queueDerived();
-    if (it && (was !== readyToBuild(it) || (hadB && !e.target.checked))) setTimeout(() => { renderMain(); renderFavs(); }, 350);
+    if (it && hadB && !t.checked && subIs("item")) setTimeout(renderSub, 350);
   });
-  pages.addEventListener("click", async e => {
+  root.addEventListener("click", async e => {
     const t = e.target;
+    if (focusClick(t)) return;
+    const go = t.closest("[data-go]");
+    if (go) { goPage(+go.dataset.go, true); return; }
+    const act = t.closest("[data-act]");
+    if (act) { doAct(act.dataset.act); return; }
+    const sb = t.closest("[data-sub]");
+    if (sb) { openSub(sb.dataset.sub); return; }
     const star = t.closest("[data-star]");
     if (star) {
       const id = star.dataset.star;
       if (state.stars[id]) delete state.stars[id]; else state.stars[id] = 1;
       save();
-      document.querySelectorAll(`[data-star="${id}"]`).forEach(b => { b.classList.toggle("on", !!state.stars[id]); b.textContent = state.stars[id] ? "★" : "☆"; });
-      refreshCards(id); renderFavs(); renderRuns(); renderRotating();
+      document.querySelectorAll(`[data-star="${id}"]`).forEach(b => {
+        const on = !!state.stars[id];
+        b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+        if (b.closest(".crow")) b.innerHTML = starSvg(on); else b.textContent = on ? "★" : "☆";
+      });
+      refreshCards(id); renderHome(); renderRuns(); renderRotating(); renderTrade();
+      if (S().starOnly) setTimeout(renderMain, 250);
       return;
     }
     const vw = t.closest("[data-vw]");
@@ -1510,18 +1814,22 @@ function bindEvents() {
       ducatSpares().forEach(x => { if (da.dataset.ducall === "0") state.ducKeep[x.full] = 1; else if (x.near) state.ducPick[x.full] = 1; });
       save(); renderRotating(); return;
     }
+    const fm = t.closest("[data-fmode]");
+    if (fm) { S().fissMode = fm.dataset.fmode; save(); renderRuns(); return; }
     const ft = t.closest("[data-ftier]");
     if (ft) { showTierRelics(ft.dataset.ftier); return; }
     const rb = t.closest("[data-relic]");
     if (rb) { showRelic(rb.dataset.relic); return; }
     const jp = t.closest("[data-jump]");
     if (jp) { jumpTo(jp.dataset.jump); return; }
+    const op = t.closest("[data-open]");
+    if (op) { openSub("item", op.dataset.open); return; }
     const m = t.closest("[data-mastered]");
     if (m) {
       const id = m.dataset.mastered, snap = snapState(), it = BYID[id];
       const on = !state.mastered[id];
       if (!on) delete state.mastered[id]; else { state.mastered[id] = 1; clearBuild(id); }
-      save(); renderMain(); renderFavs(); renderRuns(); renderRotating();
+      save(); renderAll(); if (subIs("item")) renderSub();
       offerUndo(`${it ? it.n : "Item"} ${on ? "marked mastered" : "unmarked"}`, snap);
       return;
     }
@@ -1530,7 +1838,7 @@ function bindEvents() {
       const it = BYID[bb.dataset.build]; if (!it) return;
       const snap = snapState();
       state.building[it.id] = { e: Date.now() + buildHours(it) * 3600e3, n: it.n };
-      save(); renderMain(); renderFavs();
+      save(); renderAll(); if (subIs("item")) renderSub();
       offerUndo(`${it.n} is building`, snap);
       return;
     }
@@ -1549,32 +1857,73 @@ function bindEvents() {
       return;
     }
     const tier = t.closest("[data-tier]");
-    if (tier) {
-      runsTier = tier.dataset.tier;
-      document.querySelectorAll("[data-tier]").forEach(b => b.setAttribute("aria-pressed", b === tier));
-      renderRuns(); return;
-    }
+    if (tier) { runsTier = tier.dataset.tier; renderSub(); return; }
     const cp = t.closest("[data-copy]");
-    if (cp) { const ok = await copyText(cp.dataset.copy); cp.textContent = ok ? "Copied" : "Blocked"; setTimeout(() => { cp.textContent = "Copy"; }, 1800); }
+    if (cp) { const ok = await copyText(cp.dataset.copy); cp.textContent = ok ? "Copied" : "Blocked"; setTimeout(() => { cp.textContent = "Copy"; }, 1800); return; }
+    settingsClick(e);
   });
-
-  $("#runs").addEventListener("click", e => {
-    const b = e.target.closest("[data-fmode]"); if (!b) return;
-    S().fissMode = b.dataset.fmode; save(); renderRuns();
-  });
-  $("#rotating").addEventListener("toggle", e => {
-    const d = e.target; if (!d.matches || !d.matches("details.rot")) return;
+  root.addEventListener("toggle", e => {
+    const d = e.target; if (!d.matches || !d.matches("details[data-rot]")) return;
     S().rotOpen[d.dataset.rot] = d.open ? 1 : 0; save();
   }, true);
-  $("#runs").addEventListener("toggle", e => {
-    const d = e.target; if (!d.matches || !d.matches("details.rsec")) return;
-    S().runsOpen[d.dataset.runs] = d.open ? 1 : 0; save();
-  }, true);
-  $("#tabs").addEventListener("click", e => { const a = e.target.closest("[data-page]"); if (a) goPage(+a.dataset.page, true); });
-  $("#menuBtn").addEventListener("click", () => setDrawer(true));
+  root.addEventListener("input", e => {
+    const t = e.target;
+    if (t.dataset.fxslot != null) { focusSuggest(+t.dataset.fxslot, t.value); return; }
+    if (t.id === "fxAdd") {
+      const q = t.value.trim().toLowerCase();
+      $("#fxParts").innerHTML = q.length < 2 ? "" : [...Object.keys(DUC()), "Forma Blueprint"].filter(n => n.toLowerCase().includes(q)).slice(0, 8).map(n => `<option value="${esc(n)}"></option>`).join("");
+      return;
+    }
+    settingsInput(e);
+  });
+  root.addEventListener("keydown", e => {
+    const t = e.target;
+    if (t.dataset && t.dataset.fxslot != null && e.key === "Enter") { // Enter takes the first suggestion
+      e.preventDefault(); const first = $("#fxsug" + t.dataset.fxslot + " [data-fxpick]"); t.blur(); if (first) first.click(); return;
+    }
+    if (t.id === "fxAdd" && e.key === "Enter") { e.preventDefault(); t.blur(); const b = document.querySelector('[data-fx="add"]'); if (b) b.click(); }
+  });
+}
+function doAct(a) {
+  if (a === "settings") { setDrawer(true); return; }
+  if (a === "backup") { setDrawer(true); setTimeout(() => { const el = $("#codeSec"); if (el) el.scrollIntoView({ block: "start", behavior: S().reduceMotion ? "auto" : "smooth" }); }, 280); return; }
+  if (a === "checklist") { setWeekly(true); return; }
+  if (a === "inventory") { showInventory(); return; }
+  if (a === "starred") { S().starOnly = true; mainCat = "all"; save(); renderMain(); goPage(PG.coll, true); $("#pg-coll").scrollTop = 0; }
+}
+/* Settings-like controls that live on the Mastery and Import data pages as well as in the menu */
+async function settingsClick(e) {
+  const t = e.target;
+  const xa = t.closest("[data-xmall]");
+  if (xa) { // quick-select: a whole chart cleared, or every Intrinsic tree at 10
+    const k = xa.dataset.xmall; state.xm = state.xm || {};
+    const fill = key => { state.xm[key] = key === "rj" || key === "dr" ? Object.fromEntries(XM.intr.find(x => x[0] === key)[2].map(t => [t, 10])) : { n: XM.NODES, j: XM.JUNCTIONS }; };
+    fill(k); if (k === "sp") fill("sc"); // the Steel Path only unlocks once the Star Chart is done
+    save(); renderSub(); renderProfile(); renderHome(); return;
+  }
+  if (t.id === "mrGo") { mrMatch(); return; }
+  if (t.id === "mrClear") { delete state.xm.adj; save(); renderSub(); renderProfile(); renderHome(); return; }
+  if (t.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); }
+}
+function settingsInput(e) {
+  if (e.target.dataset.xm) xmSet(e.target, false); // the estimate updates as you type
+  if (e.target.id === "mrRank") e.target.dataset.touched = 1;
+}
+function bindEvents() {
+  bindContent($("#pages")); bindContent($("#sub"));
+  $("#sub").addEventListener("change", e => {
+    const t = e.target;
+    if (t.dataset.xm) { xmSet(t, true); return; }
+    if (t.dataset.scan && t.files && t.files[0]) { const f = t.files[0]; t.value = ""; if (window.runScan) window.runScan(t.dataset.scan, f); }
+  });
+  $("#subBack").addEventListener("click", closeSub);
+  $("#bnav").addEventListener("click", e => { const b = e.target.closest("[data-page]"); if (b) goPage(+b.dataset.page, true); });
   $("#scrim").addEventListener("click", () => { setDrawer(false); setWeekly(false); });
-  $("#weeklyBtn").addEventListener("click", () => setWeekly(true));
-  $("#modalRoot").addEventListener("click", e => { if (e.target.id === "modal" || e.target.closest("[data-close]")) closeModal(); });
+  $("#modalRoot").addEventListener("click", e => {
+    if (e.target.id === "modal" || e.target.closest("[data-close]")) { closeModal(); return; }
+    const rb = e.target.closest("[data-relic]"); if (rb && !e.target.closest(".relcard .ctop")) { showRelic(rb.dataset.relic); return; }
+    const op = e.target.closest("[data-open]"); if (op) { closeModal(); openSub("item", op.dataset.open); }
+  });
 
   const dr = $("#drawer");
   dr.addEventListener("click", async e => {
@@ -1595,18 +1944,7 @@ function bindEvents() {
       return;
     }
     if (e.target.id === "tourBtn") { setDrawer(false); setTimeout(showTour, 250); return; }
-    const xa = e.target.closest("[data-xmall]");
-    if (xa) { // quick-select: a whole chart cleared, or every Intrinsic tree at 10
-      const k = xa.dataset.xmall; state.xm = state.xm || {};
-      const fill = key => { state.xm[key] = key === "rj" || key === "dr" ? Object.fromEntries(XM.intr.find(x => x[0] === key)[2].map(t => [t, 10])) : { n: XM.NODES, j: XM.JUNCTIONS }; };
-      fill(k); if (k === "sp") fill("sc"); // the Steel Path only unlocks once the Star Chart is done
-      save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true; return;
-    }
-    if (e.target.id === "mrGo") { mrMatch(); return; }
-    if (e.target.id === "mrClear") { delete state.xm.adj; save(); renderDrawer(); const sec = $("#mrSec"); if (sec) sec.open = true; return; }
     if (e.target.id === "clearBtn") { setDrawer(false); setTimeout(showClear, 250); return; }
-    if (e.target.id === "invBtn") { setDrawer(false); setTimeout(showInventory, 250); return; }
-    if (e.target.id === "scanCancel") { if (window.cancelScan) window.cancelScan(); return; }
     if (e.target.id === "bkCopy") {
       const code = await makeBackup(); const ok = await copyText(code);
       $("#bkIn").value = code; say(e.target, ok ? "Backup code copied" : "Copy blocked: the code is in the box below"); return;
@@ -1620,12 +1958,10 @@ function bindEvents() {
       state = next; save(); decoFor = undefined; renderWeekly(); applyDisplay(); applyTheme(); renderDrawer(); renderAll(); say($("#bkRestore"), "Progress restored");
     }
   });
-  dr.addEventListener("input", e => { if (e.target.dataset.xm) xmSet(e.target, false); if (e.target.id === "mrRank") e.target.dataset.touched = 1; }); // the estimate updates as you type
   dr.addEventListener("change", e => {
     const t = e.target;
     if (t.dataset.show) { S().show[t.dataset.show] = t.checked; save(); applyDisplay(); renderOpenCards(); return; }
     if (t.dataset.disp) { S()[t.dataset.disp] = t.checked; save(); applyDisplay(); return; }
-    if (t.dataset.xm) { xmSet(t, true); return; }
     if (t.dataset.vend) { if (t.checked) delete S().hideVend[t.dataset.vend]; else S().hideVend[t.dataset.vend] = 1; save(); renderRotating(); return; }
     if (t.id === "bkFile" && t.files && t.files[0]) {
       const f = t.files[0]; t.value = "";
@@ -1633,7 +1969,6 @@ function bindEvents() {
       return;
     }
     if (t.id === "startSel") { S().startPage = +t.value; save(); }
-    if (t.dataset.scan && t.files && t.files[0]) { const f = t.files[0]; t.value = ""; if (window.runScan) window.runScan(t.dataset.scan, f); }
   });
   dr.addEventListener("input", e => {
     if (e.target.id !== "tsize") return;
@@ -1644,44 +1979,46 @@ function bindEvents() {
 }
 function renderOpenCards() { expanded.forEach(id => refreshCards(id)); }
 
-/* ---------- PAGES (swipe) ---------- */
+/* ---------- PAGES (bottom bar) ---------- */
 /* A floating up-arrow once you've scrolled a long way down a page */
 function bindUpArrow() {
   const b = document.createElement("button");
   b.id = "upBtn"; b.className = "upbtn"; b.setAttribute("aria-label", "Back to top"); b.innerHTML = "↑";
   document.body.appendChild(b);
-  const cur = () => document.querySelectorAll(".page")[page];
+  const cur = () => SUB ? $("#subBody") : document.querySelectorAll(".page")[page];
   const check = () => { const p = cur(); b.classList.toggle("show", !!p && p.scrollTop > 900 && !drawerOpen && !weeklyOpen); };
-  document.querySelectorAll(".page").forEach(p => p.addEventListener("scroll", check, { passive: true }));
+  document.querySelectorAll(".page, #subBody").forEach(p => p.addEventListener("scroll", check, { passive: true }));
   b.addEventListener("click", () => { const p = cur(); if (p) p.scrollTo({ top: 0, behavior: S().reduceMotion ? "auto" : "smooth" }); });
   window.__upCheck = check;
 }
-let page = PAGE_MAIN; // replaced by the start page setting at launch
+let page = PG.home; // replaced by the start page setting at launch
 function goPage(i, smooth) {
+  closeSub();
   const p = $("#pages");
-  p.scrollTo({ left: i * p.clientWidth, behavior: smooth ? "smooth" : "auto" });
+  if (i === page && smooth) { const pg = document.querySelectorAll(".page")[i]; if (pg) pg.scrollTo({ top: 0, behavior: S().reduceMotion ? "auto" : "smooth" }); } // tapping the tab you're on goes back to the top
+  p.scrollTo({ left: i * p.clientWidth, behavior: "auto" });
   setTab(i);
 }
-function setTab(i) { page = i; if (window.__upCheck) window.__upCheck(); document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on", +a.dataset.page === i)); checkBaro(); }
+function setTab(i) {
+  page = i; if (window.__upCheck) window.__upCheck();
+  document.querySelectorAll("#bnav [data-page]").forEach(b => { const on = +b.dataset.page === i; b.classList.toggle("on", on); b.setAttribute("aria-current", on ? "page" : "false"); });
+  checkBaro();
+}
 function bindPages() {
-  const p = $("#pages"); let raf = 0;
-  p.addEventListener("scroll", () => {
-    if (raf) return;
-    raf = requestAnimationFrame(() => { raf = 0; const i = Math.round(p.scrollLeft / p.clientWidth); if (i !== page) setTab(i); });
-  }, { passive: true });
+  const p = $("#pages");
   window.addEventListener("resize", () => { p.scrollLeft = page * p.clientWidth; });
 }
 
-/* ---------- PULL TO REFRESH (Rotating and Relic Runs) ---------- */
+/* ---------- PULL TO REFRESH (Home, Relics and Vendors) ---------- */
 function bindPullRefresh() {
-  ["#pg-rotating", "#pg-runs"].forEach(sel => {
+  ["#pg-vendors", "#pg-relics", "#pg-home"].forEach(sel => {
     const pg = $(sel);
     const tip = document.createElement("div");
     tip.className = "ptr"; tip.setAttribute("aria-hidden", "true");
     pg.prepend(tip);
     let y0 = null, x0 = 0, pull = 0, busy = false;
     pg.addEventListener("touchstart", e => {
-      if (busy || pg.scrollTop > 0 || drawerOpen || weeklyOpen) { y0 = null; return; }
+      if (busy || pg.scrollTop > 0 || drawerOpen || weeklyOpen || (sel === "#pg-home" && state.focus)) { y0 = null; return; }
       y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; pull = 0;
     }, { passive: true });
     pg.addEventListener("touchmove", e => {
@@ -1814,6 +2151,7 @@ function checklistDot() {
   const left = ["daily", "weekly"].some(sec => CHECKLIST[sec].flatMap(([, l]) => l).some(([id]) => !wTicked(sec, id))
     || state.weekly.c.some(x => x.sec === sec && x.text && !wTicked(sec, x.id)));
   const b = $("#weeklyBtn"); if (b) b.classList.toggle("dot", left);
+  return left;
 }
 function bindWeekly() {
   const wk = $("#weekly");
@@ -1821,7 +2159,7 @@ function bindWeekly() {
     const k = e.target.dataset.w; if (!k) return;
     const sec = k.split(":")[0];
     if (e.target.checked) { state.weekly.t[k] = periodKey(sec); blinkBuddy(); } else delete state.weekly.t[k];
-    save(); renderWeekly();
+    save(); renderWeekly(); renderHome();
   });
   wk.addEventListener("click", e => {
     const add = e.target.closest("[data-wadd]");
@@ -1855,6 +2193,7 @@ window.wrcBack = function () {
   if ($("#modal")) { closeModal(); return true; }
   if (drawerOpen) { setDrawer(false); return true; }
   if (weeklyOpen) { setWeekly(false); return true; }
+  if (SUB) { closeSub(); return true; }
   const home = +S().startPage || 0;
   if (page !== home) { goPage(home, true); return true; }
   return false;
@@ -1936,7 +2275,7 @@ let ducPanel = false;
 function ducatHTML() {
   const list = ducatSpares();
   let h = `<div class="ducats"><h4>Spare parts for Ducats</h4><p class="secsub">Parts from your last scan that belong to Primes you've mastered, minus any still needed for others. Untick anything you want to keep; trade the rest at a Relay's Ducat kiosk.</p>`;
-  if (!Object.keys(state.partCounts || {}).length) return h + `<p class="empty">Upload a Parts recording under Import Data in Settings to see what you can trade in.</p></div>`;
+  if (!Object.keys(state.partCounts || {}).length) return h + `<p class="empty">Import a Parts recording under Profile › Import data to see what you can trade in.</p></div>`;
   const opts = [["ducAZ", "A–Z"], ["ducHideSets", "Hide complete sets"], ["ducNear", "Nearly complete"]];
   const on = opts.filter(([k]) => S()[k]).length;
   h += `<div class="controls ducctl"><button class="chip ghost" data-ducall="1">Select all</button><button class="chip ghost" data-ducall="0">Select none</button>
@@ -2022,7 +2361,7 @@ async function loadLive() {
     LIVE = live; LIVE_AT = Date.now(); LIVE_OFFLINE = false;
     try { localStorage.setItem(KEY_LIVE, JSON.stringify({ at: LIVE_AT, l: LIVE })); } catch (e) {}
   } else LIVE_OFFLINE = !!LIVE;
-  refreshLiveSets(); renderRotating(); renderRuns(); renderUpdated(); renderOpenCards(); checkBaro();
+  refreshLiveSets(); renderRotating(); renderRuns(); renderHome(); renderUpdated(); renderOpenCards(); checkBaro();
   ITEMS.forEach(it => { if (state.stars[it.id]) refreshCards(it.id); });
 }
 function loadCachedLive() {
@@ -2035,6 +2374,7 @@ setInterval(() => {
   document.querySelectorAll("[data-until]").forEach(s => {
     const t = +s.dataset.until; s.textContent = t > now ? left(t) : "now";
   });
+  document.querySelectorAll("[data-short]").forEach(s => { const t = +s.dataset.short; s.textContent = t > now ? shortLeft(t) : "now"; });
 }, 1000);
 setInterval(renderUpdated, 30000);
 // keep the live feed current while the app is open, and when it comes back to the front
@@ -2050,33 +2390,22 @@ function runIntro() {
   setTimeout(later, reduce ? 400 : 1900);
 }
 
-/* ---------- TOP BAR HEIGHT ---------- */
-/* Tab names shrink until all four fit: some themes' lettering is much wider than others' */
-function fitTabs() {
-  const bar = document.querySelector(".topbar .tabs"); if (!bar) return;
-  const tabs = [...bar.querySelectorAll("a")];
-  tabs.forEach(a => { a.style.fontSize = ""; a.style.letterSpacing = ""; });
-  let size = parseFloat(getComputedStyle(tabs[0]).fontSize), guard = 0;
-  while (bar.scrollWidth > bar.clientWidth + 1 && size > 9 && guard++ < 40) {
-    size -= 0.5; tabs.forEach(a => { a.style.fontSize = size + "px"; a.style.letterSpacing = ".02em"; });
-  }
-}
-function trackTopbar() {
-  const tb = document.querySelector(".topbar");
-  const set = () => { fitTabs(); document.documentElement.style.setProperty("--toph", tb.offsetHeight + "px"); };
+/* ---------- BOTTOM BAR HEIGHT ---------- */
+function trackNav() {
+  const nav = $("#bnav");
+  const set = () => document.documentElement.style.setProperty("--navh", nav.offsetHeight + "px");
   set();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(set);
-  if (window.ResizeObserver) new ResizeObserver(set).observe(tb); else window.addEventListener("resize", set);
+  if (window.ResizeObserver) new ResizeObserver(set).observe(nav); else window.addEventListener("resize", set);
 }
 
 /* ---------- START ---------- */
 applyDisplay();
 applyTheme();
-trackTopbar();
+trackNav();
 runIntro();
-buildMain(); buildFavs(); buildRuns(); renderDrawer();
+buildMain(); renderDrawer();
 bindEvents(); bindPages(); bindDrawerGesture(); bindWeekly(); bindPullRefresh(); bindUpArrow(); startHidden();
-page = +S().startPage; if (!(page >= 0 && page <= 3)) page = PAGE_MAIN;
+page = +S().startPage; if (!(page >= 0 && page <= 4)) page = PG.home;
 requestAnimationFrame(() => goPage(page, false));
 loadCachedLive();
 loadData().then(loadLive);
