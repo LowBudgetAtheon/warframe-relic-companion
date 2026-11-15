@@ -78,8 +78,8 @@ function orokinSale() {
 
 /* ---------- Stalker: rare red takeover, or tap the launch logo 5 times ---------- */
 const STALKER_LINES = ["I have watched you hoard their relics.", "Every Prime you build is another debt.", "The Void will not hide you forever.", "You were never alone in here."];
-function stalkerTakeover(forced) {
-  if (isUnlocked("stalker") || document.querySelector(".stalker-take")) return;
+function stalkerTakeover(forced, dev) {
+  if ((isUnlocked("stalker") && !dev) || document.querySelector(".stalker-take")) return;
   const el = document.createElement("div");
   el.className = "stalker-take";
   el.setAttribute("role", "button");
@@ -228,8 +228,10 @@ function checkBaro() {
 /* ---------- Technocyte Coda: the infection, and its cure ---------- */
 let infectTimer = 0;
 function checkInfection() {
-  const on = FIRST_FOUR.every(isUnlocked) && !isUnlocked("coda");
+  const dv = hasDevkit() ? S().devInfect : 0; // Dev tools: 1 forces it on, -1 holds it off
+  const on = dv === 1 || (dv !== -1 && FIRST_FOUR.every(isUnlocked) && !isUnlocked("coda"));
   document.body.classList.toggle("infected", on);
+  const tg = document.getElementById("devInfect"); if (tg) tg.checked = on;
   const s = document.getElementById("search");
   if (s) s.placeholder = on ? "Search \u2592 p\u2592rty \u2592f y\u2592ur l\u2592fet\u2592me \u2592" : "Search";
   clearInterval(infectTimer);
@@ -253,6 +255,7 @@ function cure() {
   setTimeout(() => {
     document.querySelectorAll(".infect").forEach(x => x.remove());
     document.body.classList.remove("curing");
+    if (S().devInfect === 1) { delete S().devInfect; save(); }
     unlockHidden("coda");
     checkInfection();
     secretPop("pop-coda", "TECHNOCYTE.EXE", `<p>C:\\&gt; party_of_your_lifetime.exe</p><p>Infection contained. A new look has been installed.</p>`, "OK");
@@ -276,6 +279,79 @@ function codeUnlock(x) { // from the Enter code box: {type:"unlock", theme:"coda
   }
   unlockHidden(x.theme);
   return true;
+}
+
+/* ---------- Dev tools ----------
+   A code (payload {"type":"devkit"}) adds a Dev tools dropdown to Settings: force any special day,
+   lock or unlock each hidden theme, force the infection, and replay each secret event. */
+const hasDevkit = () => Object.values(state.secrets || {}).some(x => x && x.type === "devkit");
+const BIRTHDAY_THEMES = ["sd-b1", "sd-b2"];
+function devDays() {
+  const bds = birthdayDays(), used = new Set(bds.map(b => b.theme));
+  // birthday themes whose code hasn't been entered on this phone: the look only, with no name or message
+  const locked = BIRTHDAY_THEMES.filter(t => !used.has(t)).map(t => ({ id: "dev-" + t, theme: t, label: `Birthday ${t.slice(4)} (no code)` }));
+  return [...SPECIAL_DAYS, ...bds, ...locked];
+}
+function devDay() {
+  const id = hasDevkit() && S().devDay; if (!id) return null;
+  const d = devDays().find(x => x.id === id);
+  return d ? { ...d, dev: true } : null;
+}
+const DEV_EVENTS = [["stalker", "Stalker takeover"], ["wally", "Man in the Wall"], ["baro", "Baro's gift"], ["clem", "Clem"], ["sale", "Orokin Sale"], ["cure", "Technocyte cure"]];
+function devSecHTML() {
+  if (!hasDevkit()) return "";
+  const cur = S().devDay || "", infected = document.body.classList.contains("infected");
+  const chip = (id, l) => `<button class="chip${cur === id ? "" : " ghost"}" data-devday="${id}" aria-pressed="${cur === id}">${esc(l)}</button>`;
+  return `<details class="dsec" id="devSec"><summary>Dev tools</summary><div class="dbody">
+    <h4>Special day</h4>
+    <p class="dnote">Turns on a special day's theme and effects right now, birthdays included. It stays on until you pick Off.</p>
+    <div class="controls devchips">${chip("", "Off")}${devDays().map(d => chip(d.id, d.label)).join("")}</div>
+    <h4>Hidden themes</h4>
+    <p class="dnote">On means unlocked, so it shows in Appearance. Turning one off locks it again.</p>
+    ${HIDDEN.map(h => `<label class="tgl"><span>${esc(h.name)}</span><input type="checkbox" data-devtheme="${h.id}"${isUnlocked(h.id) ? " checked" : ""}></label>`).join("")}
+    <label class="tgl"><span>Technocyte infection</span><input type="checkbox" id="devInfect"${infected ? " checked" : ""}></label>
+    <h4>Play an event</h4>
+    <p class="dnote">Runs it as if you'd just found it, which also unlocks its theme.</p>
+    <div class="controls devchips">${DEV_EVENTS.map(([k, l]) => `<button class="chip ghost" data-devplay="${k}">${l}</button>`).join("")}</div>
+  </div></details>`;
+}
+function devRefresh() { renderDrawer(); const d = document.getElementById("devSec"); if (d) d.open = true; }
+function devPlay(k) {
+  setDrawer(false);
+  setTimeout(() => {
+    if (k === "stalker") stalkerTakeover(false, true);
+    if (k === "wally") wallyArrives();
+    if (k === "sale") orokinSale();
+    if (k === "baro") { unlockHidden("baro"); secretPop("pop-baro", "A gift from the Void Trader", "<p>Baro Ki'Teer noticed you browsing his wares, and left something gilded behind.</p><p>Baro Ki'Teer theme unlocked.</p>", "Accept"); }
+    if (k === "clem") { unlockHidden("clem"); secretPop("pop-clem", "Clem", "<p>Grakata.</p><p>Clem appreciates you. Clem theme unlocked.</p>", "Grakata!"); }
+    if (k === "cure") { S().devInfect = 1; save(); checkInfection(); setTimeout(cure, 2500); } // let it spread a moment first
+  }, 300);
+}
+function bindDevTools(dr) {
+  dr.addEventListener("click", e => {
+    const day = e.target.closest("[data-devday]");
+    if (day) {
+      const id = day.dataset.devday;
+      if (id) S().devDay = id; else delete S().devDay;
+      save(); decoFor = undefined; applyTheme(); devRefresh(); return; // forget the last decoration so the effects play again
+    }
+    const ev = e.target.closest("[data-devplay]");
+    if (ev) devPlay(ev.dataset.devplay);
+  });
+  dr.addEventListener("change", e => {
+    const t = e.target;
+    if (t.dataset.devtheme) {
+      const id = t.dataset.devtheme;
+      if (t.checked) state.unlocked[id] = 1;
+      else { delete state.unlocked[id]; if (S().theme === id) S().theme = DEFAULT_SETTINGS.theme; }
+      save(); applyTheme(); checkInfection(); devRefresh(); return;
+    }
+    if (t.id === "devInfect") {
+      const natural = FIRST_FOUR.every(isUnlocked) && !isUnlocked("coda");
+      if (t.checked) S().devInfect = 1; else if (natural) S().devInfect = -1; else delete S().devInfect;
+      save(); checkInfection(); devRefresh();
+    }
+  });
 }
 
 /* Called once by app.js after it has started */
