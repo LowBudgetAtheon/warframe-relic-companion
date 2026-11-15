@@ -1725,18 +1725,13 @@ function stopD77() {
 function showD77Picker() {
   d77Asked = true;
   const cur = d77Pick();
-  $("#modalRoot").innerHTML = `<div class="modal d77pick" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name">Choose your Light</div><div class="meta"><span class="tag">7/7</span><span class="cnt">Your pick themes the app for the rest of today</span></div></div>
+  $("#modalRoot").innerHTML = `<div class="modal d77pick" id="modal"><article class="card"><div class="chead" style="cursor:default"><div class="name d77greet">Eyes up, Guardian</div><div class="meta"><span class="tag">7/7</span><span class="cnt">Choose your Light. It themes the app for the rest of today.</span></div></div>
     <div class="mbody"><div class="subgrid">${D77.map(([k, n, line, c]) => `<button class="subpick${cur === k ? " on" : ""}" data-d77="${k}" style="--c0:${c[0]};--c1:${c[1]};--c2:${c[2]}"><span class="sw"><i></i><i></i><i></i></span><b>${n}</b><small>${line}</small></button>`).join("")}</div>
-    <p class="secsub" style="margin:10px 0 0">Changed your mind? Tap the little floating buddy to pick again.</p></div></article></div>`;
+    <p class="secsub" style="margin:10px 0 0">Changed your mind? Tap the little buddy on the bottom bar to pick again.</p></div></article></div>`;
 }
 function pickD77(k) {
   state.d77 = { day: localDay(), pick: k }; save(); closeModal();
   decoFor = undefined; applyTheme(); renderDrawer();
-  document.querySelectorAll(".bdbanner").forEach(e => e.remove());
-  document.body.insertAdjacentHTML("beforeend", `<div class="bdbanner d77banner" role="status">Eyes up, Guardian<button aria-label="Dismiss" data-bdclose>×</button></div>`);
-  const bn = $(".d77banner");
-  bn.querySelector("[data-bdclose]").addEventListener("click", () => bn.remove());
-  setTimeout(() => { bn.classList.add("out"); setTimeout(() => bn.remove(), 600); }, 6000);
 }
 function confettiBurst() {
     const cols = ["#ff3fa4", "#3ff0ff", "#b6ff3f", "#ffd23f", "#a35cff"];
