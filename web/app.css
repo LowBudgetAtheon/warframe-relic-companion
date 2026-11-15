@@ -609,6 +609,8 @@ body.dragging .drawer,body.dragging .scrim{transition:none}
 
 /* ---------- SIDE MENU SECTIONS + DISPLAY SETTINGS ---------- */
 details.dsec{border-top:1px solid var(--line)}
+.devchips{flex-wrap:wrap;gap:6px}
+.devchips .chip{min-height:34px;padding:6px 10px;font-size:12.5px}
 details.dsec:last-of-type{border-bottom:1px solid var(--line)}
 details.dsec > summary{list-style:none;display:flex;align-items:center;justify-content:space-between;min-height:44px;cursor:pointer;
   font:600 13px var(--fh);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}

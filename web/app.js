@@ -999,7 +999,7 @@ function renderDrawer() {
   $("#drawer").innerHTML = `<h2>Settings</h2>
     <details class="dsec"><summary>Appearance</summary><div class="dbody">
       <h4>Theme</h4>
-      ${sd ? `<div class="sdnote">${esc(sd.label)} theme is on today. Your theme comes back tomorrow.</div>` : ""}
+      ${sd ? `<div class="sdnote">${sd.dev ? `${esc(sd.label)} theme is on from Dev tools. Pick Off there to get your theme back.` : `${esc(sd.label)} theme is on today. Your theme comes back tomorrow.`}</div>` : ""}
       <div class="themes">${THEMES.map(([k, l, sw]) => `<button class="themebtn" data-theme-set="${k}" aria-pressed="${st.theme === k}"><span class="sw">${sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>${l}</button>`).join("")}${hiddenThemeRows()}</div>
       <h4>Display</h4>
       <div class="drow"><label for="tsize">Text size</label><input id="tsize" type="range" min="85" max="130" step="5" value="${st.textSize}"><output id="tsizeOut">${st.textSize}%</output></div>
@@ -1024,6 +1024,7 @@ function renderDrawer() {
       <div class="controls"><button class="chip ghost" id="invBtn">View inventory</button></div>
       <div class="scanmsg${SCAN_UI.bad ? " bad" : ""}" id="scanMsg" role="status">${esc(SCAN_UI.msg)}${SCAN_UI.busy ? ` <button class="linkbtn" id="scanCancel">Cancel</button>` : ""}</div>
     </div></details>
+    ${devSecHTML()}
     <div class="spacer"></div>
     <h3>Enter code</h3>
     <div class="codebox"><input id="codeIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code"><button class="chip" id="codeBtn">Unlock</button></div>
@@ -1177,18 +1178,23 @@ function equinox(year, autumn) { // Meeus, Astronomical Algorithms ch. 27: withi
   return new Date((jde - 2440587.5) * 86400000);
 }
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+// in calendar order; equinoxes move a little each year
+const SPECIAL_DAYS = [
+  { id: "newyear", theme: "sd-newyear", label: "New Year's", fx: "confetti", m: 1, d: 1 },
+  { id: "spring", theme: "sd-spring", label: "Spring equinox", eq: "spring" },
+  { id: "d77", theme: "sd-77", label: "7/7", fx: "buddy", m: 7, d: 7 },
+  { id: "autumn", theme: "sd-autumn", label: "Autumn equinox", eq: "autumn" },
+  { id: "halloween", theme: "sd-halloween", label: "Halloween", m: 10, d: 31 },
+  { id: "christmas", theme: "sd-christmas", label: "Christmas", fx: "snow", m: 12, d: 25 },
+];
+const birthdayDays = () => Object.values(state.secrets || {}).filter(x => x && x.type === "birthday")
+  .map(x => ({ id: x.id, theme: x.theme, label: `${x.name}'s birthday`, banner: x.message, m: x.month, d: x.day }));
 function specialDay(now = new Date()) {
+  const forced = typeof devDay === "function" ? devDay() : null; // Dev tools can switch one on by hand
+  if (forced) return forced;
   const m = now.getMonth() + 1, d = now.getDate(), y = now.getFullYear();
-  for (const x of Object.values(state.secrets || {})) {
-    if (x.type === "birthday" && x.month === m && x.day === d) return { id: x.id, theme: x.theme, label: `${x.name}'s birthday`, banner: x.message };
-  }
-  if (m === 12 && d === 25) return { id: "christmas", theme: "sd-christmas", label: "Christmas", fx: "snow" };
-  if (m === 10 && d === 31) return { id: "halloween", theme: "sd-halloween", label: "Halloween" };
-  if (m === 1 && d === 1) return { id: "newyear", theme: "sd-newyear", label: "New Year's", fx: "confetti" };
-  if (m === 7 && d === 7) return { id: "d77", theme: "sd-77", label: "7/7", fx: "buddy" };
-  if (sameDay(now, equinox(y, false))) return { id: "spring", theme: "sd-spring", label: "Spring equinox" };
-  if (sameDay(now, equinox(y, true))) return { id: "autumn", theme: "sd-autumn", label: "Autumn equinox" };
-  return null;
+  const hit = [...birthdayDays(), ...SPECIAL_DAYS].find(x => x.eq ? sameDay(now, equinox(y, x.eq === "autumn")) : x.m === m && x.d === d);
+  return hit || null;
 }
 let decoFor = null;
 function decorate(sd) {
@@ -1201,13 +1207,13 @@ function decorate(sd) {
   if (sd.fx === "buddy") document.body.insertAdjacentHTML("beforeend", `<div class="buddy" aria-hidden="true"><svg viewBox="0 0 34 34">
     <path d="M17 2 L25 10 L22 17 L25 24 L17 32 L9 24 L12 17 L9 10 Z" fill="#e9d29a" opacity=".9"/><path d="M17 8 L22 13 L17 17 L12 13 Z M17 17 L22 21 L17 26 L12 21 Z" fill="#fbf6e6" opacity=".55"/>
     <circle class="eye" cx="17" cy="17" r="3.4" fill="#9fd6ff"/></svg></div>`);
-  if (sd.fx === "confetti" && !S().reduceMotion && !sessionStorage.getItem("wrc-confetti")) {
-    try { sessionStorage.setItem("wrc-confetti", "1"); } catch (e) {}
+  if (sd.fx === "confetti" && !S().reduceMotion && (sd.dev || !sessionStorage.getItem("wrc-confetti"))) {
+    if (!sd.dev) try { sessionStorage.setItem("wrc-confetti", "1"); } catch (e) {}
     setTimeout(confettiBurst, document.getElementById("intro") ? 2000 : 0); // after the launch animation
   }
   const yk = `${sd.id}-${new Date().getFullYear()}`;
-  if (sd.banner && !state.banners[yk]) {
-    state.banners[yk] = 1; save();
+  if (sd.banner && (sd.dev || !state.banners[yk])) { // a Dev tools preview doesn't use up the real day's banner
+    if (!sd.dev) { state.banners[yk] = 1; save(); }
     document.body.insertAdjacentHTML("beforeend", `<div class="bdbanner" role="status">${esc(sd.banner)}<button aria-label="Dismiss" data-bdclose>×</button></div>`);
     document.querySelector("[data-bdclose]").addEventListener("click", e => e.target.parentElement.remove());
   }
@@ -1544,6 +1550,7 @@ function bindEvents() {
         if (got.type !== "unlock") { state.secrets[got.id] = got; save(); }
         msg.className = "codemsg ok"; msg.textContent = "Secret unlocked!"; $("#codeIn").value = "";
         if (got.type === "unlock") setTimeout(() => { setDrawer(false); codeUnlock(got); }, 700);
+        if (got.type === "devkit") setTimeout(() => { devRefresh(); const d = $("#devSec"); if (d) d.scrollIntoView({ block: "start", behavior: "smooth" }); }, 700);
         applyTheme();
       } else { msg.className = "codemsg bad"; msg.textContent = "This code is invalid."; }
       return;
@@ -1591,7 +1598,7 @@ function bindEvents() {
     if (e.target.id !== "tsize") return;
     S().textSize = +e.target.value; $("#tsizeOut").textContent = e.target.value + "%"; save(); applyDisplay();
   });
-  bindSoundPicker(dr);
+  bindSoundPicker(dr); bindDevTools(dr);
   dr.addEventListener("keydown", e => { if (e.target.id === "codeIn" && e.key === "Enter") $("#codeBtn").click(); });
 }
 function renderOpenCards() { expanded.forEach(id => refreshCards(id)); }

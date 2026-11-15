@@ -14,6 +14,10 @@ window.WRC_SECRETS = {
   {
    "i": "LYf7m3u-NwqcKiIr",
    "c": "X5lLseiCKsYcW8tEQbH1xhar0cewBswzAk6gYO1StQ0rJ4J8urxVQw140n6lP497qtNRnoVVUFqEVXM4O6s"
+  },
+  {
+   "i": "cpRBE8h_GEBASi0P",
+   "c": "aQbeIwx3xU4XbDGmdVX3uq5t9KXyPRt4EbKdkdL2B3mC8BI8vgosWtqo3wvzqpg"
   }
  ]
 };
