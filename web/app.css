@@ -1122,3 +1122,27 @@ body[data-theme="coda"] .subhead{background:#1a0016}
 .fround{white-space:nowrap}
 .phead h1.brand{flex:1 1 0;min-width:0}
 body.no-oracle .subpage .secsub,body.no-oracle .subpage footer{display:none !important}
+
+/* Special-day effects sit behind the pages: they show between cards, never over text */
+.pages{z-index:1}
+.snow{z-index:0}
+.fxbg{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.fall{position:absolute;top:-40px;display:block;animation:leaffall var(--dur) linear forwards;will-change:transform}
+.fall b{display:block;width:100%;height:100%;animation:leafsway var(--swd) ease-in-out infinite alternate}
+.fall svg{display:block;width:100%;height:100%;opacity:.9}
+.fall.still{animation:none;transform:rotate(var(--rot))}
+.fall.still b{animation:none}
+@keyframes leaffall{to{transform:translate3d(var(--dx),calc(100vh + 80px),0) rotate(var(--rot))}}
+@keyframes leafsway{from{transform:translateX(calc(var(--sway) * -1)) rotate(-18deg)}to{transform:translateX(var(--sway)) rotate(18deg)}}
+/* sub-pages turn see-through once they've slid in, so the effects show behind them too */
+.subpage{transition:transform .22s ease,background-color 0s,visibility 0s .22s}
+body.sub-open .subpage{background-color:transparent;transition:transform .22s ease,background-color 0s .22s}
+.pages{transition:visibility 0s}
+body.sub-open .pages{visibility:hidden;transition:visibility 0s .22s}
+.subhead{background:transparent}
+body.reduce-motion .subpage,body.reduce-motion.sub-open .subpage,body.reduce-motion.sub-open .pages{transition:none}
+/* the 7/7 buddy floats above the bottom bar */
+.buddy{bottom:calc(var(--navh) + 14px)}
+.leafpile{position:absolute;left:0;right:0;top:-10px;height:16px;pointer-events:none;z-index:1}
+.leafpile i{position:absolute;display:block;margin-left:-6px}
+.leafpile svg{display:block;width:100%;height:100%;filter:drop-shadow(0 1px 0 rgba(0,0,0,.25))}
